@@ -1,16 +1,20 @@
 # AstroChart
 
-Ruby gem for natal astrology chart calculation, powered by Swiss Ephemeris.
+Pure-Ruby gem for natal astrology chart calculation: apparent planetary
+longitudes, Placidus houses, aspects, and synastry.
 
-Uses the **Moshier ephemeris** mode — no external data files needed. Just compile and run.
+**No C extension, no external data files, MIT licensed.** Implemented from
+public formulas (Jean Meeus, *Astronomical Algorithms* 2nd ed.; VSOP87D;
+ELP-2000/82B), verified against Swiss Ephemeris to < 0.014° (most bodies
+< 0.001°) across 1900–2026 with zero zodiac sign flips.
 
 ## Installation
 
 ```ruby
-gem "astro_chart", "~> 0.1.0"
+gem "astro_chart", "~> 0.2"
 ```
 
-Then `bundle install`. The C extension will compile automatically.
+Then `bundle install`. Nothing to compile.
 
 ## Usage
 
@@ -70,13 +74,29 @@ result = chart.generate
 
 ### Planets Included
 
-太陽, 月亮, 水星, 金星, 火星, 木星, 土星, 天王星, 海王星, 冥王星, 北交點, 南交點
+太陽, 月亮, 水星, 金星, 火星, 木星, 土星, 天王星, 海王星, 冥王星, 北交點（真交點）, 南交點
 
 Plus three ruler points: 北交點定位星, 南交點定位星, 上升星座定位星
 
 ### Aspects
 
 合相 (0°, orb 15°), 六分相 (60°, orb 6°), 四分相 (90°, orb 8°), 三分相 (120°, orb 8°), 對分相 (180°, orb 10°)
+
+### Synastry (合盤)
+
+```ruby
+result = AstroChart::Synastry.between(chart_a, chart_b, orb_limit: 6.0)
+
+result["aspects"]
+#=> [{ "a_planet" => "太陽", "b_planet" => "月亮",
+#      "aspect_type" => "三分相", "orb" => 1.23 }, ...]  # sorted by orb
+
+result["a_planets_in_b_houses"]  #=> { "太陽" => 7, ... }  (house overlay)
+result["b_planets_in_a_houses"]  #=> { "月亮" => 12, ... }
+```
+
+Lower-level: `Synastry.cross_aspects(positions_a, positions_b)` and
+`Synastry.house_overlay(positions, cusps)` work on raw longitude hashes.
 
 ### Individual Modules
 
@@ -91,33 +111,48 @@ AstroChart::Aspects.calculate(0, 90)  #=> ["四分相", 0.0]
 # Julian Day conversion
 jd = AstroChart::TimeConversion.to_julian_day("1990-01-01", "12:00", "Asia/Taipei")
 
-# Raw Swiss Ephemeris access
+# Raw ephemeris access (planet ids follow the SE convention)
 AstroChart::Ephemeris.julday(2000, 1, 1, 12.0)
-AstroChart::Ephemeris.calc_ut(jd, AstroChart::Ext::SUN)
+AstroChart::Ephemeris.calc_ut(jd, AstroChart::Ephemeris::PLANETS["太陽"])
 AstroChart::Ephemeris.houses(jd, 25.033, 121.565)
 ```
 
-## Geocoding
+## Backends
 
-This gem does **not** handle geocoding. Pass latitude, longitude, and timezone directly. For city-to-coordinate conversion, use the [geocoder](https://github.com/alexreisner/geocoder) gem or your own lookup table.
-
-## House System
-
-Defaults to **Placidus**. Pass a different system code to `Houses.calculate`:
+The default backend is `:pure` (pure Ruby, always available). The legacy
+Swiss Ephemeris C extension backend can still be selected **if you compile
+and provide the extension yourself** — it is no longer shipped with this gem
+(it is AGPL-licensed, see 0.1.x):
 
 ```ruby
-AstroChart::Houses.calculate(jd, lat, lon, "W")  # Whole sign
-AstroChart::Houses.calculate(jd, lat, lon, "K")  # Koch
+AstroChart.backend          #=> :pure
+AstroChart.backend = :swiss # raises LoadError unless the extension is present
 ```
+
+## Accuracy & Limits
+
+- Verified against Swiss Ephemeris (Moshier), 1900–2026, 400 samples per
+  body: Sun ≤ 0.0002°, Moon ≤ 0.0013°, planets ≤ 0.0006°, Pluto ≤ 0.0005°,
+  true node ≤ 0.014°, house cusps ≤ 0.0003°. Zero zodiac sign flips.
+- Pluto series is valid 1885–2099 (raises outside this range).
+- **House system: Placidus only** on the pure backend (`"P"`). Other systems
+  raise `ArgumentError`. Polar latitudes (|lat| ≳ 66.5°) raise
+  `AstroChart::Pure::Core::DomainError` — Placidus is undefined there.
+
+## Geocoding
+
+This gem does **not** handle geocoding. Pass latitude, longitude, and
+timezone directly. For city-to-coordinate conversion, use the
+[geocoder](https://github.com/alexreisner/geocoder) gem or your own lookup
+table.
 
 ## Development
 
 ```bash
 bundle install
-rake compile
 rake spec
 ```
 
 ## License
 
-AGPL-3.0 (required by Swiss Ephemeris)
+MIT
