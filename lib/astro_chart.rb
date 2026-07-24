@@ -10,8 +10,15 @@ require_relative "astro_chart/aspects"
 require_relative "astro_chart/houses"
 require_relative "astro_chart/time_conversion"
 require_relative "astro_chart/planets"
+require_relative "astro_chart/points"
+require_relative "astro_chart/patterns"
+require_relative "astro_chart/stats"
 require_relative "astro_chart/synastry"
 require_relative "astro_chart/chart"
+require_relative "astro_chart/transits"
+require_relative "astro_chart/progressions"
+require_relative "astro_chart/composite"
+require_relative "astro_chart/solar_return"
 
 module AstroChart
 end

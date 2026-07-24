@@ -13,12 +13,18 @@ module AstroChart
     #     宮頭 11/12 位於 RAMC 東側 1/3、2/3 半日弧處；宮頭 2/3 以半夜弧對應）
     #
     # 公開 API：
-    #   Houses.calc(jd_ut, lat, lon)
+    #   Houses.calc(jd_ut, lat, lon, hsys = "P")
     #     -> { "cusps" => [12 floats], "ascendant" => Float, "mc" => Float }
-    #     欄位與 AstroChart::Ext.houses(jd, lat, lon, "P".ord) 相同。
+    #     欄位與 AstroChart::Ext.houses(jd, lat, lon, hsys.ord) 相同。
     #
-    # 適用範圍：|lat| < ~66°（Placidus 在極圈內無定義）。
-    # 超出範圍或迭代未收斂時 raise Core::DomainError（顯性失敗，不靜默 clamp）。
+    # 宮位制：
+    #   "P" — Placidus（預設）。適用範圍 |lat| < ~66°（極圈內無定義），
+    #         超出範圍或迭代未收斂時 raise Core::DomainError（顯性失敗，不靜默 clamp）。
+    #   "W" — 整宮制（Whole Sign）。宮頭 1 = ASC 所在星座起點（floor(asc/30)*30），
+    #         其後每宮 +30°。ASC / MC 計算與 Placidus 相同（整宮制只改宮頭），
+    #         唯極圈內（|lat| > 90° − ε ≈ 66.56°）另套用東昇點修正（見
+    #         east_ascendant）——標準公式在該區可能傳回差 180° 的西方交點。
+    #         於 |lat| < 90° 皆有定義（lat = ±90° 時 tanφ 發散，ASC 本身無定義）。
     module Houses
       DEG2RAD = Core::DEG2RAD
       RAD2DEG = Core::RAD2DEG
@@ -26,7 +32,8 @@ module AstroChart
       module_function
 
       # jd_ut: UT 儒略日；lat: 地理緯度（北正）；lon: 地理經度（東正）
-      def calc(jd_ut, lat, lon)
+      # hsys: "P"（Placidus，預設）或 "W"（整宮制）
+      def calc(jd_ut, lat, lon, hsys = "P")
         tt = Core.jd_tt(jd_ut)
         eps = Core.true_obliquity(tt) * DEG2RAD          # 真黃赤交角（弧度）
         ast_deg = Core.apparent_sidereal_deg(jd_ut)      # 視恆星時（度）
@@ -36,6 +43,23 @@ module AstroChart
         mc  = mc_longitude(armc, eps)
         asc = asc_longitude(armc, eps, phi)
 
+        cusps =
+          case hsys
+          when "W"
+            # 極圈內（|lat| > 90° − ε ≈ 66.56°）標準 atan2 公式可能傳回西方
+            # 交點（差 180°）；整宮制在極圈內仍有定義，故此處修正為東昇點。
+            # 極圈外此修正恆為 no-op；Placidus 路徑不套用（維持原輸出）。
+            asc = east_ascendant(asc, mc)
+            whole_sign_cusps(asc)
+          else
+            placidus_cusps(armc, eps, phi, asc, mc)
+          end
+
+        { "cusps" => cusps, "ascendant" => asc, "mc" => mc }
+      end
+
+      # --- Placidus 12 宮頭 ---
+      def placidus_cusps(armc, eps, phi, asc, mc)
         # Placidus 半弧迭代：宮頭 11、12（地平上，RAMC 東側）與 2、3（地平下）
         c11 = placidus_cusp(armc, eps, phi, 30.0,  1.0 / 3.0, :diurnal)
         c12 = placidus_cusp(armc, eps, phi, 60.0,  2.0 / 3.0, :diurnal)
@@ -55,8 +79,22 @@ module AstroChart
         cusps[9]  = mc                         # 第 10 宮 = MC
         cusps[10] = c11
         cusps[11] = c12
+        cusps
+      end
 
-        { "cusps" => cusps, "ascendant" => asc, "mc" => mc }
+      # --- 東昇點修正 ---
+      # ASC 依定義位於 MC 東側半圓：(asc − mc) mod 360 ∈ (0°, 180°)。
+      # 極圈內原始公式可能落在西側半圓（實為降點），此時加 180°。
+      # 與 Swiss Ephemeris 極區行為一致（tmp/explore_polar_asc.rb 驗證 400 例全符）。
+      def east_ascendant(asc, mc)
+        ((asc - mc) % 360.0) < 180.0 ? asc : Core.norm360(asc + 180.0)
+      end
+
+      # --- 整宮制 12 宮頭 ---
+      # 宮頭 1 = ASC 所在星座 0°，其後每宮 +30°（模 360）。
+      def whole_sign_cusps(asc)
+        base = (asc / 30.0).floor * 30.0
+        Array.new(12) { |i| (base + 30.0 * i) % 360.0 }
       end
 
       # --- MC：天頂赤經 → 黃道經度 ---

@@ -82,6 +82,35 @@ module AstroChart
       end
     end
 
+    # Apparent daily motion in ecliptic longitude (degrees/day), via central
+    # difference of calc_ut at jd ± 0.5 day. The difference is folded into
+    # (-180, 180] so the 0°/360° wraparound never produces a spurious value.
+    # Negative speed = retrograde motion.
+    #
+    # When jd ± 0.5 falls outside a body's valid ephemeris window (e.g. the
+    # pure Pluto series' 1885-2099 range) while jd itself is inside, the
+    # stencil falls back to a one-sided difference over half a day, so
+    # charts at the very edges of the documented range still work. A jd
+    # that is itself out of range still raises Pure::Core::DomainError.
+    def self.speed(jd, planet_id)
+      a, b, days =
+        begin
+          [calc_ut(jd - 0.5, planet_id), calc_ut(jd + 0.5, planet_id), 1.0]
+        rescue Pure::Core::DomainError
+          begin
+            [calc_ut(jd, planet_id), calc_ut(jd + 0.5, planet_id), 0.5]
+          rescue Pure::Core::DomainError
+            [calc_ut(jd - 0.5, planet_id), calc_ut(jd, planet_id), 0.5]
+          end
+        end
+      (((b - a + 540.0) % 360.0) - 180.0) / days
+    end
+
+    # Whether the body is retrograde (moving backwards in longitude) at jd.
+    def self.retrograde?(jd, planet_id)
+      speed(jd, planet_id) < 0
+    end
+
     # Calculate house cusps + ascendant.
     # Returns { "cusps" => [12 floats], "ascendant" => float, "mc" => float }
     def self.houses(jd, latitude, longitude, system = "P")

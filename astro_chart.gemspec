@@ -4,9 +4,13 @@ Gem::Specification.new do |spec|
   spec.name          = "astro_chart"
   spec.version       = AstroChart::VERSION
   spec.authors       = ["Huang Yudi"]
-  spec.summary       = "Pure-Ruby natal chart calculation (planets, Placidus houses, aspects, synastry)"
-  spec.description   = "Natal astrology chart calculation in pure Ruby: apparent planetary longitudes " \
-                       "(VSOP87D, ELP-2000/82B moon, Meeus Pluto), Placidus houses, aspects and synastry. " \
+  spec.summary       = "Pure-Ruby astrology chart calculation (planets, Placidus/whole-sign houses, " \
+                       "aspects, synastry, transits, progressions, composite, solar returns)"
+  spec.description   = "Astrology chart calculation in pure Ruby: apparent planetary longitudes " \
+                       "(VSOP87D, ELP-2000/82B moon, Meeus Pluto), Placidus and whole-sign houses, " \
+                       "retrograde flags, aspects, derived points (Part of Fortune, mean Lilith), " \
+                       "aspect-pattern detection and element statistics, plus synastry, transits, " \
+                       "secondary progressions, composite charts and solar returns. " \
                        "No C extension, no external data files. Implemented from public formulas " \
                        "(Meeus, Astronomical Algorithms 2nd ed.)."
   spec.homepage      = "https://github.com/morriedig/astro_chart"

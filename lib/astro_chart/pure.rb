@@ -49,15 +49,17 @@ module AstroChart
       end
     end
 
-    # House cusps + ascendant + MC. Only Placidus is implemented.
-    # hsys accepts "P" or 80 ("P".ord) to mirror the C extension's int argument.
+    # House cusps + ascendant + MC. Placidus ("P") and Whole Sign ("W").
+    # hsys accepts "P"/"W" or 80/87 (ord values) to mirror the C extension's int argument.
     def houses(jd_ut, latitude, longitude, hsys = "P")
-      unless hsys == "P" || hsys == 80
+      case hsys
+      when "P", 80 then Houses.calc(jd_ut, latitude, longitude, "P")
+      when "W", 87 then Houses.calc(jd_ut, latitude, longitude, "W")
+      else
         raise ArgumentError,
-              "unsupported house system #{hsys.inspect} (pure backend only supports Placidus: \"P\" / 80)"
+              "unsupported house system #{hsys.inspect} " \
+              "(pure backend supports Placidus \"P\"/80 and Whole Sign \"W\"/87)"
       end
-
-      Houses.calc(jd_ut, latitude, longitude)
     end
   end
 end

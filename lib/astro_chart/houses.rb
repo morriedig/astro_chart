@@ -1,8 +1,9 @@
 module AstroChart
   module Houses
     # Calculate house cusps and ascendant from Julian Day + coordinates.
+    # system: "P" (Placidus, default) or "W" (Whole Sign).
     # Returns [cusps_array(12), ascendant_degree].
-    def self.calculate(jd, latitude, longitude, system = "P")
+    def self.calculate(jd, latitude, longitude, system: "P")
       data = Ephemeris.houses(jd, latitude, longitude, system)
       [data["cusps"], data["ascendant"]]
     end
