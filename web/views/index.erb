@@ -1,0 +1,401 @@
+<%
+  tz_zones = %w[
+    Asia/Taipei Asia/Tokyo Asia/Seoul Asia/Shanghai Asia/Hong_Kong Asia/Singapore
+    Asia/Bangkok Asia/Kolkata Asia/Dubai Australia/Sydney Europe/London Europe/Paris
+    Europe/Berlin Europe/Moscow America/New_York America/Chicago America/Los_Angeles
+    America/Sao_Paulo UTC
+  ]
+  tz_options = tz_zones.map { |z|
+    sel = z == "Asia/Taipei" ? " selected" : ""
+    "<option value=\"#{z}\"#{sel}>#{z}</option>"
+  }.join
+  city_field = lambda do |p|
+    <<~HTML
+      <div class="field field-city">
+        <label for="#{p}-city" data-i18n="citySearch">城市搜尋</label>
+        <div class="city-wrap">
+          <input type="text" id="#{p}-city" placeholder="輸入城市（中文或英文）自動帶入座標" data-i18n-placeholder="cityPh" autocomplete="off"
+                 role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="#{p}-city-drop">
+          <ul class="city-drop" id="#{p}-city-drop" role="listbox" hidden></ul>
+        </div>
+      </div>
+    HTML
+  end
+  person_fields = lambda do |p, date, time|
+    <<~HTML
+      <div class="field">
+        <label for="#{p}-date" data-i18n="birthDate">出生日期</label>
+        <input type="date" id="#{p}-date" value="#{date}" required>
+      </div>
+      <div class="field">
+        <label for="#{p}-time" data-i18n="birthTime">出生時間</label>
+        <input type="time" id="#{p}-time" value="#{time}" required>
+      </div>
+      #{city_field.call(p)}
+      <div class="field">
+        <label for="#{p}-lat" data-i18n="lat">緯度</label>
+        <input type="number" id="#{p}-lat" step="0.0001" min="-90" max="90" value="25.0330" required>
+      </div>
+      <div class="field">
+        <label for="#{p}-lng" data-i18n="lng">經度</label>
+        <input type="number" id="#{p}-lng" step="0.0001" min="-180" max="180" value="121.5654" required>
+      </div>
+      <div class="field">
+        <label for="#{p}-tz" data-i18n="tz">時區</label>
+        <select id="#{p}-tz">#{tz_options}</select>
+      </div>
+      <div class="field">
+        <label for="#{p}-tz-custom" data-i18n="tzCustom">自訂時區（IANA 名稱，留空則用上方選項）</label>
+        <input type="text" id="#{p}-tz-custom" placeholder="例如 Asia/Taipei" data-i18n-placeholder="tzPh" autocomplete="off">
+      </div>
+    HTML
+  end
+%>
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AstroChart 星盤</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand"><span class="brand-mark">✦</span>AstroChart<span class="brand-sub" data-i18n="brandSub">星盤</span></div>
+    <div class="site-tools">
+      <div class="lang-switch" role="group" aria-label="語言" data-i18n-aria="langAria">
+        <button type="button" class="lang-btn active" data-lang="zh-TW" aria-pressed="true">繁中</button>
+        <button type="button" class="lang-btn" data-lang="en" aria-pressed="false">EN</button>
+        <button type="button" class="lang-btn" data-lang="ja" aria-pressed="false">日本語</button>
+        <button type="button" class="lang-btn" data-lang="ko" aria-pressed="false">한국어</button>
+      </div>
+      <nav class="site-nav"><a href="/docs" data-i18n="navDocs">API 文件</a></nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="tabs" role="tablist" aria-label="功能切換" data-i18n-aria="tabsAria">
+      <button type="button" class="tab active" id="tab-natal" role="tab" aria-selected="true" aria-controls="panel-natal" data-i18n="tabNatal">本命盤</button>
+      <button type="button" class="tab" id="tab-syn" role="tab" aria-selected="false" aria-controls="panel-syn" data-i18n="tabSyn">合盤</button>
+      <button type="button" class="tab" id="tab-trans" role="tab" aria-selected="false" aria-controls="panel-trans" data-i18n="tabTrans">行運</button>
+      <button type="button" class="tab" id="tab-prog" role="tab" aria-selected="false" aria-controls="panel-prog" data-i18n="tabProg">推運</button>
+      <button type="button" class="tab" id="tab-solar" role="tab" aria-selected="false" aria-controls="panel-solar" data-i18n="tabSolar">太陽回歸</button>
+      <button type="button" class="tab" id="tab-comp" role="tab" aria-selected="false" aria-controls="panel-comp" data-i18n="tabComp">組合盤</button>
+    </div>
+
+    <section id="panel-natal" role="tabpanel" aria-labelledby="tab-natal">
+      <form id="natal-form" class="card" novalidate>
+        <div class="form-grid">
+          <%= person_fields.call("natal", "1990-01-01", "12:00") %>
+          <div class="field">
+            <label for="natal-hs" data-i18n="houseSystem">宮位制</label>
+            <select id="natal-hs">
+              <option value="P" selected data-i18n="hsPlacidusOpt">普拉西德制（Placidus）</option>
+              <option value="W" data-i18n="hsWholeOpt">整宮制（Whole Sign）</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" id="natal-submit" class="btn" data-i18n="btnNatal">繪製星盤</button>
+        </div>
+      </form>
+
+      <div id="natal-error" class="error" role="alert" hidden></div>
+
+      <div id="natal-result" hidden>
+        <div class="result-actions">
+          <button type="button" id="natal-share" class="btn btn-ghost" data-i18n="btnShare">分享</button>
+          <button type="button" id="natal-png" class="btn btn-ghost" data-i18n="btnPng">下載圖片</button>
+        </div>
+        <div class="wheel-wrap" id="natal-wheel"></div>
+        <p class="asc-line" id="natal-asc"></p>
+        <div class="legend" id="natal-legend" aria-label="相位顏色圖例" data-i18n-aria="legendAria"></div>
+
+        <div class="tables">
+          <section class="card">
+            <h2 data-i18n="secPlanets">行星位置</h2>
+            <div class="table-scroll" id="natal-planets"></div>
+          </section>
+          <section class="card">
+            <h2 data-i18n="secHouses">宮位</h2>
+            <div class="table-scroll" id="natal-houses"></div>
+          </section>
+          <section class="card wide">
+            <h2 data-i18n="secPatterns">相位圖形</h2>
+            <div class="patterns" id="natal-patterns"></div>
+          </section>
+          <section class="card wide">
+            <h2 data-i18n="secStats">元素與三方統計</h2>
+            <div class="stats" id="natal-stats"></div>
+          </section>
+          <section class="card wide">
+            <h2 data-i18n="secAspects">相位</h2>
+            <div class="table-scroll" id="natal-aspects"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-syn" role="tabpanel" aria-labelledby="tab-syn" hidden>
+      <form id="syn-form" class="card" novalidate>
+        <div class="syn-grid">
+          <fieldset>
+            <legend data-i18n="partyA">甲方 A</legend>
+            <div class="form-grid">
+              <%= person_fields.call("a", "1990-01-01", "12:00") %>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend data-i18n="partyB">乙方 B</legend>
+            <div class="form-grid">
+              <%= person_fields.call("b", "1993-07-15", "08:30") %>
+            </div>
+          </fieldset>
+        </div>
+        <div class="form-actions form-actions-syn">
+          <div class="field field-orb">
+            <label for="syn-orb" data-i18n="orbDefault">容許度上限（度，留空則用預設容許度）</label>
+            <input type="number" id="syn-orb" step="0.5" min="0" value="6">
+          </div>
+          <button type="submit" id="syn-submit" class="btn" data-i18n="btnSyn">計算合盤</button>
+        </div>
+      </form>
+
+      <div id="syn-error" class="error" role="alert" hidden></div>
+
+      <div id="syn-result" hidden>
+        <div class="result-actions">
+          <button type="button" id="syn-share" class="btn btn-ghost" data-i18n="btnShare">分享</button>
+        </div>
+        <div class="tables">
+          <section class="card wide">
+            <h2 data-i18n="secSynAspects">跨盤相位</h2>
+            <div class="table-scroll" id="syn-aspects"></div>
+          </section>
+          <section class="card">
+            <h2 data-i18n="secAInB">A 的行星在 B 的宮位</h2>
+            <div class="table-scroll" id="syn-a-in-b"></div>
+          </section>
+          <section class="card">
+            <h2 data-i18n="secBInA">B 的行星在 A 的宮位</h2>
+            <div class="table-scroll" id="syn-b-in-a"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-trans" role="tabpanel" aria-labelledby="tab-trans" hidden>
+      <form id="trans-form" class="card" novalidate>
+        <div class="syn-grid">
+          <fieldset>
+            <legend data-i18n="natalData">本命資料</legend>
+            <div class="form-grid">
+              <%= person_fields.call("tr", "1990-01-01", "12:00") %>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend data-i18n="transitMoment">行運時刻</legend>
+            <p class="hint" data-i18n="hintTransNow">留空以「現在」時刻計算；填寫則日期與時間須同時填。</p>
+            <div class="form-grid">
+              <div class="field">
+                <label for="tr-at-date" data-i18n="dateLabel">日期</label>
+                <input type="date" id="tr-at-date">
+              </div>
+              <div class="field">
+                <label for="tr-at-time" data-i18n="timeLabel">時間</label>
+                <input type="time" id="tr-at-time">
+              </div>
+              <div class="field">
+                <label for="tr-at-tz" data-i18n="tz">時區</label>
+                <select id="tr-at-tz"><%= tz_options %></select>
+              </div>
+              <div class="field">
+                <label for="tr-at-tz-custom" data-i18n="tzCustom">自訂時區（IANA 名稱，留空則用上方選項）</label>
+                <input type="text" id="tr-at-tz-custom" placeholder="例如 Asia/Taipei" data-i18n-placeholder="tzPh" autocomplete="off">
+              </div>
+            </div>
+          </fieldset>
+        </div>
+        <div class="form-actions form-actions-syn">
+          <div class="field field-orb">
+            <label for="trans-orb" data-i18n="orb3">容許度上限（度，留空則用預設 3）</label>
+            <input type="number" id="trans-orb" step="0.5" min="0" value="3">
+          </div>
+          <button type="submit" id="trans-submit" class="btn" data-i18n="btnTrans">計算行運</button>
+        </div>
+      </form>
+
+      <div id="trans-error" class="error" role="alert" hidden></div>
+
+      <div id="trans-result" hidden>
+        <div class="result-actions">
+          <button type="button" id="trans-share" class="btn btn-ghost" data-i18n="btnShare">分享</button>
+        </div>
+        <p class="meta-line" id="trans-time"></p>
+        <div class="tables">
+          <section class="card wide">
+            <h2 data-i18n="secTransPlanets">行運行星位置</h2>
+            <div class="table-scroll" id="trans-planets"></div>
+          </section>
+          <section class="card wide">
+            <h2 data-i18n="secTransAspects">行運相位（對本命）</h2>
+            <div class="table-scroll" id="trans-aspects"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-prog" role="tabpanel" aria-labelledby="tab-prog" hidden>
+      <form id="prog-form" class="card" novalidate>
+        <div class="form-grid">
+          <%= person_fields.call("pg", "1990-01-01", "12:00") %>
+          <div class="field">
+            <label for="pg-target" data-i18n="progTarget">推運目標日期</label>
+            <input type="date" id="pg-target" value="<%= Date.today %>" required>
+          </div>
+          <div class="field">
+            <label for="pg-orb" data-i18n="orb1">容許度上限（度，留空則用預設 1）</label>
+            <input type="number" id="pg-orb" step="0.5" min="0" value="1">
+          </div>
+        </div>
+        <div class="form-actions">
+          <button type="submit" id="prog-submit" class="btn" data-i18n="btnProg">計算推運</button>
+        </div>
+      </form>
+
+      <div id="prog-error" class="error" role="alert" hidden></div>
+
+      <div id="prog-result" hidden>
+        <div class="result-actions">
+          <button type="button" id="prog-share" class="btn btn-ghost" data-i18n="btnShare">分享</button>
+        </div>
+        <p class="meta-line" id="prog-meta"></p>
+        <div class="tables">
+          <section class="card wide">
+            <h2 data-i18n="secProgPlanets">推運行星位置</h2>
+            <div class="table-scroll" id="prog-planets"></div>
+          </section>
+          <section class="card wide">
+            <h2 data-i18n="secProgAspects">推運相位（對本命）</h2>
+            <div class="table-scroll" id="prog-aspects"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-solar" role="tabpanel" aria-labelledby="tab-solar" hidden>
+      <form id="solar-form" class="card" novalidate>
+        <div class="syn-grid">
+          <fieldset>
+            <legend data-i18n="natalData">本命資料</legend>
+            <div class="form-grid">
+              <%= person_fields.call("sr", "1990-01-01", "12:00") %>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend data-i18n="srSettings">回歸設定</legend>
+            <div class="form-grid">
+              <div class="field">
+                <label for="sr-year" data-i18n="srYear">回歸年份</label>
+                <input type="number" id="sr-year" step="1" value="<%= Date.today.year %>" required>
+              </div>
+            </div>
+            <p class="hint" data-i18n="hintSrLoc">回歸地點（選填，留空則用出生地）：</p>
+            <div class="form-grid">
+              <%= city_field.call("srloc") %>
+              <div class="field">
+                <label for="srloc-lat" data-i18n="lat">緯度</label>
+                <input type="number" id="srloc-lat" step="0.0001" min="-90" max="90">
+              </div>
+              <div class="field">
+                <label for="srloc-lng" data-i18n="lng">經度</label>
+                <input type="number" id="srloc-lng" step="0.0001" min="-180" max="180">
+              </div>
+              <div class="field">
+                <label for="srloc-tz-custom" data-i18n="tzIana">時區（IANA 名稱）</label>
+                <input type="text" id="srloc-tz-custom" placeholder="例如 Asia/Taipei" data-i18n-placeholder="tzPh" autocomplete="off">
+              </div>
+            </div>
+          </fieldset>
+        </div>
+        <div class="form-actions">
+          <button type="submit" id="solar-submit" class="btn" data-i18n="btnSolar">計算太陽回歸</button>
+        </div>
+      </form>
+
+      <div id="solar-error" class="error" role="alert" hidden></div>
+
+      <div id="solar-result" hidden>
+        <div class="result-actions">
+          <button type="button" id="solar-share" class="btn btn-ghost" data-i18n="btnShare">分享</button>
+          <button type="button" id="solar-png" class="btn btn-ghost" data-i18n="btnPng">下載圖片</button>
+        </div>
+        <p class="meta-line" id="solar-time"></p>
+        <div class="wheel-wrap" id="solar-wheel"></div>
+        <p class="asc-line" id="solar-asc"></p>
+        <div class="legend" id="solar-legend" aria-label="相位顏色圖例" data-i18n-aria="legendAria"></div>
+        <div class="tables">
+          <section class="card">
+            <h2 data-i18n="secPlanets">行星位置</h2>
+            <div class="table-scroll" id="solar-planets"></div>
+          </section>
+          <section class="card">
+            <h2 data-i18n="secHouses">宮位</h2>
+            <div class="table-scroll" id="solar-houses"></div>
+          </section>
+          <section class="card wide">
+            <h2 data-i18n="secAspects">相位</h2>
+            <div class="table-scroll" id="solar-aspects"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <section id="panel-comp" role="tabpanel" aria-labelledby="tab-comp" hidden>
+      <form id="comp-form" class="card" novalidate>
+        <div class="syn-grid">
+          <fieldset>
+            <legend data-i18n="partyA">甲方 A</legend>
+            <div class="form-grid">
+              <%= person_fields.call("ca", "1990-01-01", "12:00") %>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend data-i18n="partyB">乙方 B</legend>
+            <div class="form-grid">
+              <%= person_fields.call("cb", "1993-07-15", "08:30") %>
+            </div>
+          </fieldset>
+        </div>
+        <div class="form-actions">
+          <button type="submit" id="comp-submit" class="btn" data-i18n="btnComp">計算組合盤</button>
+        </div>
+      </form>
+
+      <div id="comp-error" class="error" role="alert" hidden></div>
+
+      <div id="comp-result" hidden>
+        <div class="result-actions">
+          <button type="button" id="comp-share" class="btn btn-ghost" data-i18n="btnShare">分享</button>
+        </div>
+        <div class="tables">
+          <section class="card wide">
+            <h2 data-i18n="secCompPlanets">組合盤行星（中點）</h2>
+            <div class="table-scroll" id="comp-planets"></div>
+          </section>
+          <section class="card wide">
+            <h2 data-i18n="secCompAspects">組合盤相位</h2>
+            <div class="table-scroll" id="comp-aspects"></div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>AstroChart · <span data-i18n="footerTag">純 Ruby 星曆計算</span> · <a href="/docs" data-i18n="navDocs">API 文件</a></p>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

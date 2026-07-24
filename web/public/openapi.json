@@ -1,0 +1,906 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AstroChart API",
+    "version": "0.3.0",
+    "description": "占星星盤運算 API — 本命盤、合盤（Synastry）、行運（Transits）、二次推運（Secondary Progressions）、太陽回歸（Solar Return）、組合盤（Composite）與城市搜尋。所有請求與回應皆為 JSON，回應帶 Access-Control-Allow-Origin: *。Beta 期間無需 API key。人類可讀文件見 /docs（English: /docs?lang=en）。Response vocabulary defaults to Traditional Chinese (zh-TW); every chart endpoint accepts an optional body field \"lang\" and /api/v1/cities accepts a \"lang\" query parameter (en / ja / ko) — see the Lang schema for the translation semantics.",
+    "license": { "name": "MIT" }
+  },
+  "servers": [
+    { "url": "/", "description": "同源（same-origin）" }
+  ],
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "健康檢查",
+        "description": "確認服務狀態與底層 astro_chart gem 版本。",
+        "responses": {
+          "200": {
+            "description": "服務正常",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "gem_version"],
+                  "properties": {
+                    "status": { "type": "string", "const": "ok" },
+                    "gem_version": { "type": "string" }
+                  }
+                },
+                "example": { "status": "ok", "gem_version": "0.3.0" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/charts": {
+      "post": {
+        "operationId": "createChart",
+        "summary": "本命盤",
+        "description": "依出生資料計算完整本命盤：上升點、17 筆行星／點位（含逆行標記、福點、莉莉絲、3 個定位星點位）、12 宮首（Placidus 或整宮制）、相位、相位圖形與元素統計。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  { "$ref": "#/components/schemas/BirthData" },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "lang": { "$ref": "#/components/schemas/Lang" }
+                    }
+                  }
+                ]
+              },
+              "example": {
+                "birth_date": "1990-01-01",
+                "birth_time": "12:00",
+                "latitude": 25.033,
+                "longitude": 121.5654,
+                "timezone": "Asia/Taipei",
+                "house_system": "P",
+                "lang": "zh-TW"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "本命盤",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/ChartResult" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/v1/synastry": {
+      "post": {
+        "operationId": "createSynastry",
+        "summary": "合盤（Synastry）",
+        "description": "計算兩人的本命盤、跨盤相位與行星落入對方宮位的對照。跨盤比較固定使用 11 個星體（太陽～冥王星＋北交點；南交點不參與）。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["a", "b"],
+                "properties": {
+                  "a": { "$ref": "#/components/schemas/BirthData" },
+                  "b": { "$ref": "#/components/schemas/BirthData" },
+                  "orb_limit": {
+                    "type": ["number", "null"],
+                    "description": "跨盤相位容許度上限（度）。省略或 null 時使用本命盤預設容許度。"
+                  },
+                  "lang": { "$ref": "#/components/schemas/Lang" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "合盤結果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": ["a_chart", "b_chart", "synastry"],
+                      "properties": {
+                        "a_chart": { "$ref": "#/components/schemas/ChartResult" },
+                        "b_chart": { "$ref": "#/components/schemas/ChartResult" },
+                        "synastry": { "$ref": "#/components/schemas/SynastryResult" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/v1/transits": {
+      "post": {
+        "operationId": "createTransits",
+        "summary": "行運（Transits）",
+        "description": "計算某一時刻（省略 at 時為伺服器當下的 UTC）12 個行運星體的位置、落入本命宮位，以及行運對本命的相位（預設容許度 3°；相位比較不含南交點）。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["natal"],
+                "properties": {
+                  "natal": { "$ref": "#/components/schemas/BirthData" },
+                  "at": {
+                    "type": ["object", "null"],
+                    "description": "行運時刻。省略時使用伺服器當下的 UTC 時間；若提供，三個子欄位皆必填。",
+                    "required": ["date", "time", "timezone"],
+                    "properties": {
+                      "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "examples": ["2026-07-24"] },
+                      "time": { "type": "string", "pattern": "^\\d{1,2}:\\d{2}$", "examples": ["12:00"] },
+                      "timezone": { "type": "string", "description": "IANA 時區識別碼", "examples": ["Asia/Taipei"] }
+                    }
+                  },
+                  "orb_limit": {
+                    "type": ["number", "null"],
+                    "default": 3.0,
+                    "description": "行運相位容許度上限（度），預設 3.0。"
+                  },
+                  "lang": { "$ref": "#/components/schemas/Lang" }
+                }
+              },
+              "example": {
+                "natal": {
+                  "birth_date": "1990-01-01",
+                  "birth_time": "12:00",
+                  "latitude": 25.033,
+                  "longitude": 121.5654,
+                  "timezone": "Asia/Taipei"
+                },
+                "at": { "date": "2026-07-24", "time": "12:00", "timezone": "Asia/Taipei" },
+                "orb_limit": 3
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "行運結果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": ["natal_chart", "transit_time_utc", "planets", "aspects"],
+                      "properties": {
+                        "natal_chart": { "$ref": "#/components/schemas/ChartResult" },
+                        "transit_time_utc": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "行運時刻（UTC，ISO 8601）",
+                          "examples": ["2026-07-24T04:00:00Z"]
+                        },
+                        "planets": {
+                          "type": "array",
+                          "description": "12 筆行運星體（太陽～冥王星＋北交點＋南交點）",
+                          "items": { "$ref": "#/components/schemas/MovingPlanet" }
+                        },
+                        "aspects": {
+                          "type": "array",
+                          "description": "行運對本命相位，依 orb 由小到大排序",
+                          "items": { "$ref": "#/components/schemas/TransitAspect" }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "data": {
+                    "natal_chart": {},
+                    "transit_time_utc": "2026-07-24T04:00:00Z",
+                    "planets": [
+                      { "planet": "太陽", "zodiac": "獅子座", "degree": 1.3043, "total_degree": 121.3043, "natal_house": 4 }
+                    ],
+                    "aspects": [
+                      { "transit_planet": "金星", "natal_planet": "土星", "aspect_type": "三分相", "orb": 0.18 }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/v1/progressions": {
+      "post": {
+        "operationId": "createProgressions",
+        "summary": "二次推運（Secondary Progressions）",
+        "description": "「一天推一年」：計算推運行星位置（落入本命宮位）與推運對本命的相位（預設容許度 1°）。目標時刻取「同一出生時間＋出生時區」。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["natal", "target_date"],
+                "properties": {
+                  "natal": { "$ref": "#/components/schemas/BirthData" },
+                  "target_date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                    "description": "推運目標日期 YYYY-MM-DD",
+                    "examples": ["2026-07-24"]
+                  },
+                  "orb_limit": {
+                    "type": ["number", "null"],
+                    "default": 1.0,
+                    "description": "推運相位容許度上限（度），預設 1.0。"
+                  },
+                  "lang": { "$ref": "#/components/schemas/Lang" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "推運結果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": ["natal_chart", "progression"],
+                      "properties": {
+                        "natal_chart": { "$ref": "#/components/schemas/ChartResult" },
+                        "progression": { "$ref": "#/components/schemas/ProgressionResult" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/v1/composite": {
+      "post": {
+        "operationId": "createComposite",
+        "summary": "組合盤（Composite）",
+        "description": "兩張本命盤的中點盤：12 個星體取兩盤經度的短弧中點，再計算中點位置彼此之間的相位（本命預設容許度）。不含宮位與上升點。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["a", "b"],
+                "properties": {
+                  "a": { "$ref": "#/components/schemas/BirthData" },
+                  "b": { "$ref": "#/components/schemas/BirthData" },
+                  "lang": { "$ref": "#/components/schemas/Lang" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "組合盤結果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": ["a_chart", "b_chart", "composite"],
+                      "properties": {
+                        "a_chart": { "$ref": "#/components/schemas/ChartResult" },
+                        "b_chart": { "$ref": "#/components/schemas/ChartResult" },
+                        "composite": { "$ref": "#/components/schemas/CompositeResult" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/v1/solar-return": {
+      "post": {
+        "operationId": "createSolarReturn",
+        "summary": "太陽回歸（Solar Return）",
+        "description": "找出指定年份行運太陽回到本命太陽經度的精確時刻並起回歸盤。可用 latitude/longitude/timezone 覆寫地點（回歸移置；timezone 僅供顯示）。注意：回歸盤 chart 為舊版結構 — planets 共 15 筆（無 retrograde／福點／莉莉絲），無 house_system/patterns/element_stats，宮位固定 Placidus。回歸時刻可能落在 year 的前一年年底。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["natal", "year"],
+                "properties": {
+                  "natal": { "$ref": "#/components/schemas/BirthData" },
+                  "year": {
+                    "type": "integer",
+                    "description": "回歸年份（JSON 整數）。超出 1885–2099 回 date_out_of_range。",
+                    "examples": [2026]
+                  },
+                  "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90, "description": "回歸地點緯度（省略時用本命座標）" },
+                  "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180, "description": "回歸地點經度（省略時用本命座標）" },
+                  "timezone": { "type": ["string", "null"], "description": "回歸地點 IANA 時區（僅供顯示，不影響計算）" },
+                  "lang": { "$ref": "#/components/schemas/Lang" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "太陽回歸結果",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": ["natal_chart", "solar_return"],
+                      "properties": {
+                        "natal_chart": { "$ref": "#/components/schemas/ChartResult" },
+                        "solar_return": { "$ref": "#/components/schemas/SolarReturnResult" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/v1/cities": {
+      "get": {
+        "operationId": "searchCities",
+        "summary": "城市搜尋",
+        "description": "查詢城市座標與時區（約 160 筆：台灣 22 縣市＋世界主要城市）。不分大小寫，支援中文名與英文／拼音別名；前綴符合優先於子字串符合；最多 10 筆。",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "關鍵字。缺少或空白回 400 missing_param。",
+            "schema": { "type": "string", "minLength": 1 },
+            "examples": {
+              "pinyin": { "value": "tai" },
+              "chinese": { "value": "東京" },
+              "english": { "value": "tokyo" }
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "required": false,
+            "description": "Response language (see the Lang schema). With en / ja / ko, each city's name and country are returned as English names (e.g. 台北市 -> Taipei); Japanese / Korean city names are not provided. Matching behavior is unaffected. Unrecognized values return 400 invalid_lang.",
+            "schema": { "$ref": "#/components/schemas/Lang" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "符合的城市（可為空陣列）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "maxItems": 10,
+                      "items": { "$ref": "#/components/schemas/City" }
+                    }
+                  }
+                },
+                "example": {
+                  "data": [
+                    { "name": "台北市", "country": "台灣", "latitude": 25.033, "longitude": 121.5654, "timezone": "Asia/Taipei" }
+                  ]
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "getOpenApi",
+        "summary": "OpenAPI 規格",
+        "description": "本文件（OpenAPI 3.1，JSON）。",
+        "responses": {
+          "200": {
+            "description": "OpenAPI 3.1 文件",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BirthData": {
+        "type": "object",
+        "description": "出生資料物件（所有起盤端點共用）",
+        "required": ["birth_date", "birth_time", "latitude", "longitude", "timezone"],
+        "properties": {
+          "birth_date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "出生日期 YYYY-MM-DD（需補零、須為有效日期；冥王星限制 1885–2099）",
+            "examples": ["1990-01-01"]
+          },
+          "birth_time": {
+            "type": "string",
+            "pattern": "^\\d{1,2}:\\d{2}$",
+            "description": "出生時間（當地時間）H:MM 或 HH:MM，24 小時制",
+            "examples": ["12:00"]
+          },
+          "latitude": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90,
+            "description": "緯度（須為 JSON 數字，字串會被拒絕）",
+            "examples": [25.033]
+          },
+          "longitude": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180,
+            "description": "經度（東經為正）",
+            "examples": [121.5654]
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA 時區識別碼",
+            "examples": ["Asia/Taipei"]
+          },
+          "house_system": {
+            "type": ["string", "null"],
+            "description": "宮位制：P/placidus = Placidus（預設）、W/whole_sign = 整宮制，不分大小寫。其他值回 400 invalid_house_system。",
+            "examples": ["P", "W", "placidus", "whole_sign"]
+          }
+        }
+      },
+      "Lang": {
+        "type": ["string", "null"],
+        "enum": ["zh-TW", "zh-tw", "zh_tw", "zh", "en", "ja", "ko", null],
+        "default": "zh-TW",
+        "description": "Response language. Matched case-insensitively; zh-TW / zh-tw / zh_tw / zh all mean Traditional Chinese (the default when omitted or null — the response is then byte-identical to a lang-less request). Translates vocabulary VALUES only: planet / zodiac / aspect / pattern / element names in fields such as planet, a_planet, b_planet, transit_planet, natal_planet, progressed_planet, planet_a, planet_b, apex, ruling_planet, zodiac, aspect_type, pattern_type, element and the patterns[].planets arrays, plus the hash KEYS of a_planets_in_b_houses / b_planets_in_a_houses / element_stats.elements / element_stats.modalities, and error messages. It NEVER changes JSON structure keys, the input echo block, numbers, or the house_system codes P / W; error code values are language-independent. Any other value (including the empty string) returns 400 invalid_lang (message in zh-TW). All schema enums in this spec list the default zh-TW vocabulary."
+      },
+      "AspectType": {
+        "type": "string",
+        "enum": ["合相", "六分相", "四分相", "三分相", "對分相"],
+        "description": "相位種類（最大容許度：合相 15°、六分相 6°、四分相 8°、三分相 8°、對分相 10°）。Enum lists the default zh-TW vocabulary; with lang=en the values become Conjunction / Sextile / Square / Trine / Opposition (ja / ko likewise localized)."
+      },
+      "ZodiacSign": {
+        "type": "string",
+        "enum": ["牡羊座", "金牛座", "雙子座", "巨蟹座", "獅子座", "處女座", "天秤座", "天蠍座", "射手座", "摩羯座", "水瓶座", "雙魚座"],
+        "description": "Enum lists the default zh-TW vocabulary; with lang the values are localized (e.g. 牡羊座 -> Aries for lang=en)."
+      },
+      "Aspect": {
+        "type": "object",
+        "required": ["planet", "aspect_type", "orb"],
+        "properties": {
+          "planet": { "type": "string", "description": "相位對象" },
+          "aspect_type": { "$ref": "#/components/schemas/AspectType" },
+          "orb": { "type": "number", "description": "與準確相位角的偏差（度，2 位小數）" }
+        }
+      },
+      "PlanetEntry": {
+        "type": "object",
+        "description": "本命盤行星／點位。17 筆依序：太陽、月亮、水星、金星、火星、木星、土星、天王星、海王星、冥王星、北交點、南交點、福點、莉莉絲、北交點定位星、南交點定位星、上升星座定位星。aspects 只出現在太陽／月亮／金星／土星／北交點／南交點與三個定位星點位；ruling_planet 只出現在定位星點位。",
+        "required": ["planet", "zodiac", "house", "degree", "total_degree", "retrograde"],
+        "properties": {
+          "planet": { "type": "string" },
+          "zodiac": { "$ref": "#/components/schemas/ZodiacSign" },
+          "house": { "type": "integer", "minimum": 1, "maximum": 12 },
+          "degree": { "type": "number", "description": "星座內度數（0–30）" },
+          "total_degree": { "type": "number", "description": "黃道絕對經度（0–360）" },
+          "retrograde": {
+            "type": "boolean",
+            "description": "是否逆行。太陽／月亮恆 false；南交點與北交點同值；福點／莉莉絲／定位星點位恆 false。"
+          },
+          "aspects": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Aspect" }
+          },
+          "ruling_planet": { "type": "string", "description": "定位星點位專屬：實際擔任定位星的行星名稱" }
+        }
+      },
+      "Ascendant": {
+        "type": "object",
+        "required": ["zodiac", "degree", "total_degree"],
+        "properties": {
+          "zodiac": { "$ref": "#/components/schemas/ZodiacSign" },
+          "degree": { "type": "number" },
+          "total_degree": { "type": "number" }
+        }
+      },
+      "HouseCusp": {
+        "type": "object",
+        "required": ["house_number", "degree", "zodiac"],
+        "properties": {
+          "house_number": { "type": "integer", "minimum": 1, "maximum": 12 },
+          "degree": { "type": "number", "description": "宮首的黃道絕對經度（0–360）" },
+          "zodiac": { "$ref": "#/components/schemas/ZodiacSign" }
+        }
+      },
+      "Pattern": {
+        "type": "object",
+        "description": "相位圖形。大三角帶 element（三星同元素時為 火/土/風/水，否則 null）；T三角帶 apex（端點星）。大十字會吸收其自身 4 星構成的 T三角；對分相被交點軸四分時只回報一筆 T三角（端點星為北交點）。",
+        "required": ["pattern_type", "planets"],
+        "properties": {
+          "pattern_type": { "type": "string", "enum": ["大三角", "T三角", "大十字"] },
+          "planets": { "type": "array", "items": { "type": "string" } },
+          "element": { "type": ["string", "null"], "enum": ["火", "土", "風", "水", null] },
+          "apex": { "type": "string" }
+        }
+      },
+      "ElementStats": {
+        "type": "object",
+        "description": "10 個古典行星（太陽～冥王星，不含交點與衍生點）的元素／三方分布，各組計數加總為 10。",
+        "required": ["elements", "modalities"],
+        "properties": {
+          "elements": {
+            "type": "object",
+            "required": ["火", "土", "風", "水"],
+            "properties": {
+              "火": { "type": "integer" },
+              "土": { "type": "integer" },
+              "風": { "type": "integer" },
+              "水": { "type": "integer" }
+            }
+          },
+          "modalities": {
+            "type": "object",
+            "required": ["基本", "固定", "變動"],
+            "properties": {
+              "基本": { "type": "integer" },
+              "固定": { "type": "integer" },
+              "變動": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "Chart": {
+        "type": "object",
+        "required": ["ascendant", "house_system", "planets", "houses", "patterns", "element_stats"],
+        "properties": {
+          "ascendant": { "$ref": "#/components/schemas/Ascendant" },
+          "house_system": { "type": "string", "enum": ["P", "W"] },
+          "planets": {
+            "type": "array",
+            "minItems": 17,
+            "maxItems": 17,
+            "items": { "$ref": "#/components/schemas/PlanetEntry" }
+          },
+          "houses": {
+            "type": "array",
+            "minItems": 12,
+            "maxItems": 12,
+            "items": { "$ref": "#/components/schemas/HouseCusp" }
+          },
+          "patterns": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Pattern" }
+          },
+          "element_stats": { "$ref": "#/components/schemas/ElementStats" }
+        }
+      },
+      "ChartResult": {
+        "type": "object",
+        "description": "Chart#generate 的完整輸出（/charts 的 data，及其他端點回應中的 *_chart）",
+        "required": ["input", "chart"],
+        "properties": {
+          "input": {
+            "type": "object",
+            "required": ["birth_date", "birth_time", "coordinates", "timezone"],
+            "properties": {
+              "birth_date": { "type": "string" },
+              "birth_time": { "type": "string" },
+              "coordinates": {
+                "type": "object",
+                "required": ["latitude", "longitude"],
+                "properties": {
+                  "latitude": { "type": "number" },
+                  "longitude": { "type": "number" }
+                }
+              },
+              "timezone": { "type": "string" }
+            }
+          },
+          "chart": { "$ref": "#/components/schemas/Chart" }
+        }
+      },
+      "SynastryResult": {
+        "type": "object",
+        "required": ["aspects", "a_planets_in_b_houses", "b_planets_in_a_houses"],
+        "properties": {
+          "aspects": {
+            "type": "array",
+            "description": "跨盤相位（11 星體 × 11 星體，南交點不參與），依 orb 由小到大排序",
+            "items": {
+              "type": "object",
+              "required": ["a_planet", "b_planet", "aspect_type", "orb"],
+              "properties": {
+                "a_planet": { "type": "string" },
+                "b_planet": { "type": "string" },
+                "aspect_type": { "$ref": "#/components/schemas/AspectType" },
+                "orb": { "type": "number" }
+              }
+            }
+          },
+          "a_planets_in_b_houses": {
+            "type": "object",
+            "description": "甲方行星落入乙方的第幾宮（1–12）",
+            "additionalProperties": { "type": "integer", "minimum": 1, "maximum": 12 }
+          },
+          "b_planets_in_a_houses": {
+            "type": "object",
+            "description": "乙方行星落入甲方的第幾宮（1–12）",
+            "additionalProperties": { "type": "integer", "minimum": 1, "maximum": 12 }
+          }
+        }
+      },
+      "MovingPlanet": {
+        "type": "object",
+        "description": "行運／推運星體：位置＋落入本命宮位",
+        "required": ["planet", "zodiac", "degree", "total_degree", "natal_house"],
+        "properties": {
+          "planet": { "type": "string" },
+          "zodiac": { "$ref": "#/components/schemas/ZodiacSign" },
+          "degree": { "type": "number" },
+          "total_degree": { "type": "number" },
+          "natal_house": { "type": "integer", "minimum": 1, "maximum": 12 }
+        }
+      },
+      "TransitAspect": {
+        "type": "object",
+        "required": ["transit_planet", "natal_planet", "aspect_type", "orb"],
+        "properties": {
+          "transit_planet": { "type": "string" },
+          "natal_planet": { "type": "string" },
+          "aspect_type": { "$ref": "#/components/schemas/AspectType" },
+          "orb": { "type": "number" }
+        }
+      },
+      "ProgressionResult": {
+        "type": "object",
+        "required": ["progressed_jd", "years_elapsed", "planets", "aspects_to_natal"],
+        "properties": {
+          "progressed_jd": { "type": "number", "description": "推運時刻的儒略日" },
+          "years_elapsed": { "type": "number", "description": "出生至目標日期經過的年數（2 位小數）" },
+          "planets": {
+            "type": "array",
+            "minItems": 12,
+            "maxItems": 12,
+            "items": { "$ref": "#/components/schemas/MovingPlanet" }
+          },
+          "aspects_to_natal": {
+            "type": "array",
+            "description": "推運對本命相位，依 orb 由小到大排序",
+            "items": {
+              "type": "object",
+              "required": ["progressed_planet", "natal_planet", "aspect_type", "orb"],
+              "properties": {
+                "progressed_planet": { "type": "string" },
+                "natal_planet": { "type": "string" },
+                "aspect_type": { "$ref": "#/components/schemas/AspectType" },
+                "orb": { "type": "number" }
+              }
+            }
+          }
+        }
+      },
+      "CompositeResult": {
+        "type": "object",
+        "required": ["planets", "aspects"],
+        "properties": {
+          "planets": {
+            "type": "array",
+            "minItems": 12,
+            "maxItems": 12,
+            "description": "12 個短弧中點位置（太陽～冥王星＋北交點＋南交點），無宮位",
+            "items": {
+              "type": "object",
+              "required": ["planet", "zodiac", "degree", "total_degree"],
+              "properties": {
+                "planet": { "type": "string" },
+                "zodiac": { "$ref": "#/components/schemas/ZodiacSign" },
+                "degree": { "type": "number" },
+                "total_degree": { "type": "number" }
+              }
+            }
+          },
+          "aspects": {
+            "type": "array",
+            "description": "組合盤位置彼此之間的相位，依 orb 由小到大排序",
+            "items": {
+              "type": "object",
+              "required": ["planet_a", "planet_b", "aspect_type", "orb"],
+              "properties": {
+                "planet_a": { "type": "string" },
+                "planet_b": { "type": "string" },
+                "aspect_type": { "$ref": "#/components/schemas/AspectType" },
+                "orb": { "type": "number" }
+              }
+            }
+          }
+        }
+      },
+      "SolarReturnPlanet": {
+        "type": "object",
+        "description": "回歸盤行星（舊版結構：無 retrograde 欄位）",
+        "required": ["planet", "zodiac", "house", "degree", "total_degree"],
+        "properties": {
+          "planet": { "type": "string" },
+          "zodiac": { "$ref": "#/components/schemas/ZodiacSign" },
+          "house": { "type": "integer", "minimum": 1, "maximum": 12 },
+          "degree": { "type": "number" },
+          "total_degree": { "type": "number" },
+          "aspects": { "type": "array", "items": { "$ref": "#/components/schemas/Aspect" } },
+          "ruling_planet": { "type": "string" }
+        }
+      },
+      "SolarReturnResult": {
+        "type": "object",
+        "required": ["return_jd", "return_time_utc", "location", "chart"],
+        "properties": {
+          "return_jd": { "type": "number", "description": "回歸時刻的儒略日（UT）" },
+          "return_time_utc": {
+            "type": "string",
+            "format": "date-time",
+            "description": "回歸時刻（UTC，ISO 8601）。可能落在 year 的前一年年底。",
+            "examples": ["2025-12-31T21:46:46Z"]
+          },
+          "location": {
+            "type": "object",
+            "required": ["latitude", "longitude", "timezone"],
+            "properties": {
+              "latitude": { "type": "number" },
+              "longitude": { "type": "number" },
+              "timezone": { "type": ["string", "null"] }
+            }
+          },
+          "chart": {
+            "type": "object",
+            "description": "回歸盤（舊版結構）：planets 共 15 筆（12 星體／交點＋3 定位星點位），不含 retrograde／福點／莉莉絲，無 house_system/patterns/element_stats，宮位固定 Placidus。",
+            "required": ["ascendant", "planets", "houses"],
+            "properties": {
+              "ascendant": { "$ref": "#/components/schemas/Ascendant" },
+              "planets": {
+                "type": "array",
+                "minItems": 15,
+                "maxItems": 15,
+                "items": { "$ref": "#/components/schemas/SolarReturnPlanet" }
+              },
+              "houses": {
+                "type": "array",
+                "minItems": 12,
+                "maxItems": 12,
+                "items": { "$ref": "#/components/schemas/HouseCusp" }
+              }
+            }
+          }
+        }
+      },
+      "City": {
+        "type": "object",
+        "required": ["name", "country", "latitude", "longitude", "timezone"],
+        "properties": {
+          "name": { "type": "string", "description": "城市中文名（with lang=en/ja/ko: primary English name, e.g. Taipei）" },
+          "country": { "type": "string", "description": "國家／地區中文名（with lang=en/ja/ko: English country name, e.g. Taiwan）" },
+          "latitude": { "type": "number" },
+          "longitude": { "type": "number" },
+          "timezone": { "type": "string", "description": "IANA 時區識別碼" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "invalid_json",
+                  "missing_param",
+                  "invalid_date",
+                  "invalid_time",
+                  "invalid_coordinates",
+                  "invalid_timezone",
+                  "invalid_house_system",
+                  "invalid_lang",
+                  "polar_latitude",
+                  "date_out_of_range",
+                  "not_found",
+                  "internal_error"
+                ]
+              },
+              "message": { "type": "string", "description": "錯誤訊息，預設 zh-TW；依請求的 lang 在地化。Malformed-JSON errors (invalid_json) and invalid_lang itself are always zh-TW because the requested lang cannot be honored. Always key program logic off code — never off the message text." }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "請求錯誤（400）。錯誤碼：invalid_json、missing_param、invalid_date、invalid_time、invalid_coordinates、invalid_timezone、invalid_house_system、invalid_lang（lang 不是 zh-TW/zh-tw/zh_tw/zh/en/ja/ko，不分大小寫；空字串也無效，訊息固定 zh-TW）、polar_latitude（Placidus 於極區緯度）、date_out_of_range（1885–2099）。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "examples": {
+              "missing_param": {
+                "value": { "error": { "code": "missing_param", "message": "缺少參數：birth_date" } }
+              },
+              "invalid_house_system": {
+                "value": { "error": { "code": "invalid_house_system", "message": "無效的宮位制式：K（支援 P / placidus 或 W / whole_sign）" } }
+              },
+              "invalid_lang": {
+                "value": { "error": { "code": "invalid_lang", "message": "不支援的語言：fr（支援 zh-TW / en / ja / ko）" } }
+              },
+              "date_out_of_range": {
+                "value": { "error": { "code": "date_out_of_range", "message": "日期超出可計算範圍（1885–2099）" } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
