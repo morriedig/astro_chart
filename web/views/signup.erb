@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>取得 API 金鑰 — AstroChart</title>
+  <meta name="description" content="免費取得 AstroChart 星盤 API 金鑰，立即開始開發。">
+  <style>
+    :root {
+      --bg: #0a0c1a; --panel: #141830; --field: #1b2038; --line: #2a3050;
+      --ink: #e8e6f0; --muted: #9aa0c0; --gold: #d3b877; --danger: #d97070;
+      --ok: #7fca92;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
+      padding: 3rem 1.25rem; line-height: 1.6;
+    }
+    .wrap { max-width: 560px; margin: 0 auto; }
+    h1 {
+      font-family: "Songti TC", "Noto Serif TC", Georgia, serif;
+      font-weight: 600; font-size: 1.9rem; margin: 0 0 0.5rem;
+    }
+    .lead { color: var(--muted); margin: 0 0 1.75rem; }
+    .panel {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 14px; padding: 1.5rem; margin-bottom: 1.25rem;
+    }
+    label { display: block; color: var(--muted); font-size: 0.8rem; letter-spacing: 0.06em; margin-bottom: 0.4rem; }
+    input, button { font: inherit; }
+    input[type=email] {
+      width: 100%; background: var(--field); border: 1px solid var(--line);
+      border-radius: 8px; color: var(--ink); padding: 0.65rem 0.75rem;
+    }
+    input[type=email]:focus { outline: none; border-color: var(--gold); }
+    button.primary {
+      width: 100%; margin-top: 1rem; background: var(--gold); border: none;
+      border-radius: 8px; color: #201a08; font-weight: 600;
+      padding: 0.7rem 1.1rem; cursor: pointer;
+    }
+    button.primary:disabled { opacity: 0.6; cursor: default; }
+    button.copy {
+      background: transparent; border: 1px solid var(--gold); color: var(--gold);
+      border-radius: 7px; padding: 0.35rem 0.8rem; cursor: pointer; font-size: 0.85rem;
+    }
+    .muted { color: var(--muted); font-size: 0.85rem; }
+    .err { color: var(--danger); margin-top: 0.75rem; min-height: 1.2em; }
+    .hidden { display: none; }
+    .token-box { background: var(--field); border: 1px solid var(--gold); border-radius: 10px; padding: 1rem; }
+    .token-box code {
+      display: block; word-break: break-all; font-size: 0.95rem;
+      color: var(--gold); margin: 0.5rem 0 0.75rem; line-height: 1.5;
+    }
+    .warn { color: var(--danger); font-size: 0.85rem; font-weight: 600; margin: 0.75rem 0 0; }
+    h2 { font-size: 0.95rem; color: var(--gold); letter-spacing: 0.05em; margin: 1.5rem 0 0.5rem; }
+    pre {
+      background: var(--field); border: 1px solid var(--line); border-radius: 8px;
+      padding: 0.75rem 0.85rem; overflow-x: auto; font-size: 0.82rem; margin: 0.5rem 0;
+    }
+    pre code { color: var(--ink); }
+    a { color: var(--gold); }
+    .links { margin-top: 1.5rem; font-size: 0.9rem; }
+    .links a { margin-right: 1.25rem; }
+    .lang-toggle { text-align: right; margin-bottom: 1rem; font-size: 0.85rem; }
+    .lang-toggle a { color: var(--muted); }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="lang-toggle">
+    <a href="/signup" data-lang-zh>中文</a> · <a href="/signup?lang=en" data-lang-en>English</a>
+  </div>
+
+  <h1 data-i18n="title">取得 API 金鑰</h1>
+  <p class="lead" data-i18n="lead">輸入你的電子郵件，立即免費取得一把 AstroChart 星盤 API 金鑰 — 無需登入。</p>
+
+  <div class="panel" id="form-panel">
+    <label for="email" data-i18n="emailLabel">電子郵件</label>
+    <input type="email" id="email" placeholder="you@example.com" autocomplete="email" required>
+    <button class="primary" id="submit" data-i18n="submit">取得金鑰</button>
+    <p class="err" id="error"></p>
+  </div>
+
+  <div class="panel token-box hidden" id="result">
+    <p class="muted" data-i18n="resultIntro">你的 API 金鑰已建立：</p>
+    <code id="token"></code>
+    <button class="copy" id="copy" data-i18n="copy">複製</button>
+    <p class="warn" data-i18n="warn">此金鑰只會顯示這一次，請立即妥善保存 — 離開後將無法再次取得。</p>
+
+    <h2 data-i18n="howTitle">如何使用</h2>
+    <p class="muted" data-i18n="howBody">在 API 請求中以 Authorization 標頭帶上金鑰：</p>
+    <pre><code id="usage-example"></code></pre>
+
+    <div class="links">
+      <a href="/docs" data-i18n="docsLink">閱讀 API 文件</a>
+      <a href="/" data-i18n="homeLink">回首頁</a>
+    </div>
+  </div>
+
+  <div class="links" id="foot-links">
+    <a href="/docs" data-i18n="docsLink">閱讀 API 文件</a>
+    <a href="/" data-i18n="homeLink">回首頁</a>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var params = new URLSearchParams(window.location.search);
+  var lang = params.get("lang") === "en" ? "en" : "zh-TW";
+
+  var I18N = {
+    "zh-TW": {
+      title: "取得 API 金鑰",
+      lead: "輸入你的電子郵件，立即免費取得一把 AstroChart 星盤 API 金鑰 — 無需登入。",
+      emailLabel: "電子郵件",
+      submit: "取得金鑰",
+      submitting: "建立中…",
+      resultIntro: "你的 API 金鑰已建立：",
+      copy: "複製",
+      copied: "已複製",
+      warn: "此金鑰只會顯示這一次，請立即妥善保存 — 離開後將無法再次取得。",
+      howTitle: "如何使用",
+      howBody: "在 API 請求中以 Authorization 標頭帶上金鑰：",
+      docsLink: "閱讀 API 文件",
+      homeLink: "回首頁",
+      pageTitle: "取得 API 金鑰 — AstroChart",
+      genericError: "發生錯誤，請稍後再試"
+    },
+    "en": {
+      title: "Get an API key",
+      lead: "Enter your email to get a free AstroChart astrology API key instantly — no sign-in required.",
+      emailLabel: "Email",
+      submit: "Get key",
+      submitting: "Creating…",
+      resultIntro: "Your API key has been created:",
+      copy: "Copy",
+      copied: "Copied",
+      warn: "This key is shown only once — save it now. You will not be able to retrieve it again after you leave.",
+      howTitle: "How to use it",
+      howBody: "Pass the key on every API request via the Authorization header:",
+      docsLink: "Read the API docs",
+      homeLink: "Back to home",
+      pageTitle: "Get an API key — AstroChart",
+      genericError: "Something went wrong; please try again later"
+    }
+  };
+
+  var t = function (key) { return (I18N[lang] && I18N[lang][key]) || I18N["zh-TW"][key]; };
+
+  function applyLang() {
+    document.documentElement.lang = lang === "en" ? "en" : "zh-Hant";
+    document.title = t("pageTitle");
+    document.querySelectorAll("[data-i18n]").forEach(function (el) {
+      el.textContent = t(el.getAttribute("data-i18n"));
+    });
+    // Keep docs link pointing at the matching-language docs page.
+    document.querySelectorAll('a[href^="/docs"]').forEach(function (a) {
+      a.setAttribute("href", lang === "en" ? "/docs?lang=en" : "/docs");
+    });
+  }
+  applyLang();
+
+  function usageSnippet(token) {
+    return 'curl https://astro-chart-api.fly.dev/api/v1/health \\\n' +
+           '  -H "Authorization: Bearer ' + token + '"';
+  }
+
+  $("submit").onclick = function () {
+    var email = $("email").value.trim();
+    $("error").textContent = "";
+    if (!email) { $("email").focus(); return; }
+    var btn = $("submit");
+    btn.disabled = true;
+    btn.textContent = t("submitting");
+
+    fetch("/api/v1/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email, lang: lang })
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        return { ok: r.ok, body: j };
+      });
+    }).then(function (res) {
+      btn.disabled = false;
+      btn.textContent = t("submit");
+      if (!res.ok) {
+        var msg = (res.body.error && res.body.error.message) || t("genericError");
+        $("error").textContent = msg;
+        return;
+      }
+      var token = res.body.data.token;
+      $("token").textContent = token;
+      $("usage-example").textContent = usageSnippet(token);
+      $("form-panel").classList.add("hidden");
+      $("foot-links").classList.add("hidden");
+      $("result").classList.remove("hidden");
+      applyLang();
+    }).catch(function () {
+      btn.disabled = false;
+      btn.textContent = t("submit");
+      $("error").textContent = t("genericError");
+    });
+  };
+
+  $("email").addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); $("submit").click(); }
+  });
+
+  $("copy").onclick = function () {
+    var token = $("token").textContent;
+    var done = function () {
+      $("copy").textContent = t("copied");
+      setTimeout(function () { $("copy").textContent = t("copy"); }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(token).then(done, function () {});
+    } else {
+      var r = document.createRange(); r.selectNode($("token"));
+      var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      try { document.execCommand("copy"); done(); } catch (e) {}
+      sel.removeAllRanges();
+    }
+  };
+})();
+</script>
+</body>
+</html>

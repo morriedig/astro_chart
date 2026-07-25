@@ -73,8 +73,76 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AstroChart 星盤</title>
+  <title>免費星盤 API・占星命盤計算 — 本命盤／合盤／行運｜AstroChart</title>
+  <meta name="description" content="AstroChart 是免費開放的占星星盤 API：純 Ruby 星曆計算本命盤、合盤、行運、推運、太陽回歸、組合盤，14 天體、JSON 回應，支援繁中／English／日本語／한국어。">
+  <meta name="keywords" content="星盤 API, 占星 API, 免費星盤, 本命盤計算, 合盤, 行運, 推運, 太陽回歸, 組合盤, astrology API, natal chart API">
+  <link rel="canonical" href="https://astro-chart-api.fly.dev/">
+  <link rel="alternate" hreflang="zh-TW" href="https://astro-chart-api.fly.dev/?lang=zh-TW">
+  <link rel="alternate" hreflang="en" href="https://astro-chart-api.fly.dev/?lang=en">
+  <link rel="alternate" hreflang="ja" href="https://astro-chart-api.fly.dev/?lang=ja">
+  <link rel="alternate" hreflang="ko" href="https://astro-chart-api.fly.dev/?lang=ko">
+  <link rel="alternate" hreflang="x-default" href="https://astro-chart-api.fly.dev/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="AstroChart">
+  <meta property="og:title" content="免費星盤 API・占星命盤計算 — 本命盤／合盤／行運｜AstroChart">
+  <meta property="og:description" content="純 Ruby 星曆計算的免費占星 API：本命盤、合盤、行運、推運、太陽回歸、組合盤，JSON 回應，支援四種語言。">
+  <meta property="og:url" content="https://astro-chart-api.fly.dev/">
+  <meta property="og:image" content="https://astro-chart-api.fly.dev/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="免費星盤 API・占星命盤計算 — 本命盤／合盤／行運｜AstroChart">
+  <meta name="twitter:description" content="純 Ruby 星曆計算的免費占星 API：本命盤、合盤、行運、推運、太陽回歸、組合盤，JSON 回應，支援四種語言。">
+  <meta name="twitter:image" content="https://astro-chart-api.fly.dev/og.png">
   <link rel="stylesheet" href="/app.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "AstroChart",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Any",
+    "url": "https://astro-chart-api.fly.dev",
+    "description": "免費開放的占星星盤 API：純 Ruby 星曆計算本命盤、合盤、行運、推運、太陽回歸、組合盤，JSON 回應，支援繁中／English／日本語／한국어。",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "AstroChart 星盤 API 是免費的嗎？",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "是。AstroChart 目前為開放測試（open beta），免費使用、免註冊、免 API 金鑰即可呼叫所有星盤端點；API 金鑰為選填，只用於歸戶用量。"
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "AstroChart 支援哪些星盤？",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "支援本命盤、合盤（synastry）、行運（transits）、二次推運（progressions）、太陽回歸（solar return）與組合盤（composite），並提供 14 個天體與相位、宮位、元素統計。"
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "AstroChart 的計算精準度如何？",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "AstroChart 以純 Ruby 天體暦計算行星位置與宮位，涵蓋 1885–2099 年，太陽回歸時刻以牛頓迭代求解，精度約在 10 秒內。"
+        }
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <header class="site-header">
@@ -86,11 +154,23 @@
         <button type="button" class="lang-btn" data-lang="ja" aria-pressed="false">日本語</button>
         <button type="button" class="lang-btn" data-lang="ko" aria-pressed="false">한국어</button>
       </div>
-      <nav class="site-nav"><a href="/docs" data-i18n="navDocs">API 文件</a></nav>
+      <nav class="site-nav">
+        <a href="/signup" data-i18n="navSignup">取得 API 金鑰</a>
+        <a href="/docs" data-i18n="navDocs">API 文件</a>
+      </nav>
     </div>
   </header>
 
   <main>
+    <section class="hero" aria-label="AstroChart">
+      <p class="hero-sub" data-i18n="heroSubtitle">純 Ruby 星曆計算的免費占星 API — 本命盤、合盤、行運、推運、太陽回歸、組合盤，支援繁中／English／日本語／한국어。</p>
+      <ul class="feature-strip">
+        <li data-i18n="featPlanets">14 天體</li>
+        <li data-i18n="featCharts">6 種盤</li>
+        <li data-i18n="featLangs">4 語 API</li>
+        <li data-i18n="featFree">免費開放</li>
+      </ul>
+    </section>
     <div class="tabs" role="tablist" aria-label="功能切換" data-i18n-aria="tabsAria">
       <button type="button" class="tab active" id="tab-natal" role="tab" aria-selected="true" aria-controls="panel-natal" data-i18n="tabNatal">本命盤</button>
       <button type="button" class="tab" id="tab-syn" role="tab" aria-selected="false" aria-controls="panel-syn" data-i18n="tabSyn">合盤</button>
@@ -406,7 +486,8 @@
   </main>
 
   <footer class="site-footer">
-    <p>AstroChart · <span data-i18n="footerTag">純 Ruby 星曆計算</span> · <a href="/docs" data-i18n="navDocs">API 文件</a></p>
+    <p class="footer-cta"><span data-i18n="footerCta">以 JSON API 驅動</span> — <a href="/docs" data-i18n="navDocs">API 文件</a> · <a href="/signup" data-i18n="navSignup">取得 API 金鑰</a></p>
+    <p>AstroChart · <span data-i18n="footerTag">純 Ruby 星曆計算</span></p>
   </footer>
 
   <script src="/app.js"></script>

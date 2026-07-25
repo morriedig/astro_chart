@@ -20,6 +20,12 @@ class AstroWeb < Sinatra::Base
   # (Sinatra/Mustermann full-matches, so no \A..\z anchors here.)
   BILLABLE = %r{/api/v1/(?:charts|synastry|transits|progressions|composite|solar-return|cities)}
 
+  # Deliberately lenient, single-line: one @ with non-space/@ on each side
+  # and a dotted domain. Good enough to reject typos without rejecting valid
+  # real-world addresses.
+  EMAIL_FORMAT = /\A[^@\s]+@[^@\s]+\.[^@\s]+\z/
+  # RFC 5321 caps a forward-path address at 254 characters.
+  EMAIL_MAX_LENGTH = 254
   DATE_FORMAT = /\A\d{4}-\d{2}-\d{2}\z/
   TIME_FORMAT = /\A(\d{1,2}):(\d{2})\z/
   CHART_PARAMS = %w[birth_date birth_time latitude longitude timezone].freeze
@@ -191,6 +197,32 @@ class AstroWeb < Sinatra::Base
     json_body("data" => I18n.localize_cities(Cities.search(q.strip), current_lang))
   end
 
+  # Self-serve API-key signup. Public, JSON, not billable, no key required.
+  # (Not matched by BILLABLE, so no auth/usage filters run.) Abuse-throttled
+  # per-IP per-day. Returns the plaintext token exactly once.
+  post "/api/v1/signup" do
+    payload = parse_json_body
+    set_lang!(payload["lang"])
+    email = payload["email"].to_s.strip
+    unless email.length <= EMAIL_MAX_LENGTH && email.match?(EMAIL_FORMAT)
+      raise ApiError.new("invalid_email", :invalid_email)
+    end
+
+    ip = client_ip
+    if settings.store.signups_from_ip_today(ip) >= signup_daily_ip_limit
+      raise ApiError.new("signup_rate_limited", :signup_rate_limited, {}, 429)
+    end
+
+    key = settings.store.create_signup_key(
+      email: email, ip: ip, monthly_limit: signup_monthly_limit
+    )
+    status 201
+    json_body("data" => {
+      "token" => key["token"], "prefix" => key["prefix"],
+      "monthly_limit" => key["monthly_limit"], "tier" => key["tier"]
+    })
+  end
+
   get "/openapi.json" do
     path = File.join(settings.public_folder, "openapi.json")
     halt 404 unless File.file?(path)
@@ -244,6 +276,32 @@ class AstroWeb < Sinatra::Base
 
   get "/docs" do
     params["lang"] == "en" ? erb(:docs_en) : erb(:docs)
+  end
+
+  # Public self-serve signup page (standalone HTML, no layout).
+  get "/signup" do
+    erb :signup, layout: false
+  end
+
+  # SEO helpers. Public, unauthenticated, not billable (non-/api paths).
+  get "/robots.txt" do
+    content_type "text/plain"
+    "User-agent: *\nAllow: /\nSitemap: https://astro-chart-api.fly.dev/sitemap.xml\n"
+  end
+
+  get "/sitemap.xml" do
+    content_type "application/xml"
+    base = "https://astro-chart-api.fly.dev"
+    paths = ["/", "/docs", "/docs?lang=en", "/signup"]
+    urls = paths.map do |p|
+      "  <url><loc>#{Rack::Utils.escape_html(base + p)}</loc></url>"
+    end.join("\n")
+    <<~XML
+      <?xml version="1.0" encoding="UTF-8"?>
+      <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+      #{urls}
+      </urlset>
+    XML
   end
 
   error ApiError do
@@ -332,6 +390,31 @@ class AstroWeb < Sinatra::Base
 
   def key_mode
     (ENV["API_KEY_MODE"] || "open").downcase
+  end
+
+  # Client IP for signup throttling. Behind Fly.io the trusted proxy exposes
+  # the real client IP via Fly-Client-IP and APPENDS it to the end of
+  # X-Forwarded-For; the FIRST XFF entry is whatever the untrusted client sent
+  # (spoofable). Prefer Fly-Client-IP, then the LAST XFF hop, then request.ip.
+  def client_ip
+    fly = request.env["HTTP_FLY_CLIENT_IP"].to_s.strip
+    return fly unless fly.empty?
+
+    fwd = request.env["HTTP_X_FORWARDED_FOR"].to_s
+    last = fwd.split(",").map(&:strip).reject(&:empty?).last.to_s
+    last.empty? ? request.ip.to_s : last
+  end
+
+  # Per-IP daily signup cap (default 5).
+  def signup_daily_ip_limit
+    (ENV["SIGNUP_DAILY_IP_LIMIT"] || "5").to_i
+  end
+
+  # Default monthly quota for self-serve keys. Unset => nil (unlimited),
+  # matching the open-beta stance.
+  def signup_monthly_limit
+    raw = ENV["SIGNUP_MONTHLY_LIMIT"]
+    raw.nil? || raw.strip.empty? ? nil : raw.to_i
   end
 
   def current_month

@@ -22,6 +22,10 @@ class Store
     migrate!
   end
 
+  # Idempotent + additive. CREATE TABLE IF NOT EXISTS establishes the base
+  # schema on a fresh DB; the ALTER steps upgrade an existing production DB
+  # (the Fly volume already holds the old schema) by adding new columns only
+  # when they are absent. Never drops or rewrites — existing rows survive.
   def migrate!
     @mutex.synchronize do
       @db.execute_batch(<<~SQL)
@@ -43,6 +47,10 @@ class Store
           PRIMARY KEY (key_id, day, endpoint)
         );
       SQL
+
+      existing = @db.execute("PRAGMA table_info(api_keys)").map { |c| c["name"] }
+      @db.execute("ALTER TABLE api_keys ADD COLUMN email TEXT") unless existing.include?("email")
+      @db.execute("ALTER TABLE api_keys ADD COLUMN created_ip TEXT") unless existing.include?("created_ip")
     end
   end
 
@@ -66,6 +74,41 @@ class Store
     }
   end
 
+  # Self-serve key issued from the public signup endpoint. Same shape as
+  # create_key (plaintext token shown once) but records the developer's
+  # email + originating IP for support/abuse handling; tier is "free".
+  # email/created_ip are operator-only — never surfaced on public endpoints.
+  def create_signup_key(email:, ip:, monthly_limit: nil)
+    token = TOKEN_PREFIX + SecureRandom.urlsafe_base64(24)
+    prefix = token[0, 11]
+    created_at = utc_now
+    id = @mutex.synchronize do
+      @db.execute(
+        "INSERT INTO api_keys (token_hash, prefix, label, tier, monthly_limit, created_at, email, created_ip) " \
+        "VALUES (?, ?, ?, 'free', ?, ?, ?, ?)",
+        [hash_token(token), prefix, "self-serve", monthly_limit, created_at, email.to_s, ip.to_s]
+      )
+      @db.last_insert_row_id
+    end
+    {
+      "id" => id, "token" => token, "prefix" => prefix, "label" => "self-serve",
+      "tier" => "free", "monthly_limit" => monthly_limit, "created_at" => created_at
+    }
+  end
+
+  # Number of keys created today (UTC) from a given IP — used to throttle
+  # self-serve signup abuse.
+  def signups_from_ip_today(ip)
+    day = Time.now.utc.strftime("%Y-%m-%d")
+    rows = @mutex.synchronize do
+      @db.execute(
+        "SELECT COUNT(*) AS n FROM api_keys WHERE created_ip = ? AND substr(created_at, 1, 10) = ?",
+        [ip.to_s, day]
+      )
+    end
+    rows.first["n"].to_i
+  end
+
   # Look up an active (non-revoked) key by its plaintext token. nil if the
   # token is unknown or the key was revoked.
   def find_key_by_token(token)
@@ -83,7 +126,7 @@ class Store
   def list_keys
     @mutex.synchronize do
       @db.execute(
-        "SELECT id, prefix, label, tier, monthly_limit, created_at, revoked_at " \
+        "SELECT id, prefix, label, tier, monthly_limit, created_at, revoked_at, email " \
         "FROM api_keys ORDER BY id DESC"
       )
     end

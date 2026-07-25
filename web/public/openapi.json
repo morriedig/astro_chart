@@ -520,6 +520,93 @@
         }
       }
     },
+    "/api/v1/signup": {
+      "post": {
+        "operationId": "signup",
+        "security": [],
+        "summary": "自助申請 API 金鑰（Self-serve signup）",
+        "description": "以電子郵件自助申請一把免費 API 金鑰，無需管理權杖。公開端點，不計費、不需金鑰。回應中的明文 token 只在此回傳一次（伺服器只保存其 SHA-256 雜湊，不會於任何公開端點回傳 email）。防濫用：同一來源 IP（取 X-Forwarded-For 的第一段，Fly 會設定）每日申請次數達 SIGNUP_DAILY_IP_LIMIT（預設 5）時回 429 signup_rate_limited。新金鑰 tier 為 free；每月上限預設為無限（除非設定 SIGNUP_MONTHLY_LIMIT）。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "開發者的電子郵件。格式無效時回 400 invalid_email。",
+                    "examples": ["dev@example.com"]
+                  },
+                  "lang": { "$ref": "#/components/schemas/Lang" }
+                }
+              },
+              "example": { "email": "dev@example.com", "lang": "zh-TW" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "已建立金鑰（明文 token 只回傳這一次）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": ["token", "prefix", "monthly_limit", "tier"],
+                      "properties": {
+                        "token": {
+                          "type": "string",
+                          "description": "明文金鑰，只回傳一次",
+                          "examples": ["ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ"]
+                        },
+                        "prefix": { "type": "string", "examples": ["ak_7hgEJAyQ"] },
+                        "monthly_limit": {
+                          "type": ["integer", "null"],
+                          "description": "每月呼叫上限；null 表示無上限（open beta 預設）。"
+                        },
+                        "tier": { "type": "string", "examples": ["free"] }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "data": {
+                    "token": "ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ",
+                    "prefix": "ak_7hgEJAyQ",
+                    "monthly_limit": null,
+                    "tier": "free"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "電子郵件格式無效（invalid_email）。",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": { "code": "invalid_email", "message": "電子郵件格式無效" } }
+              }
+            }
+          },
+          "429": {
+            "description": "同一 IP 當日申請次數過多（signup_rate_limited）。",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": { "code": "signup_rate_limited", "message": "今日申請次數過多，請明日再試" } }
+              }
+            }
+          }
+        }
+      }
+    },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApi",
@@ -1198,10 +1285,12 @@
                   "key_required",
                   "invalid_api_key",
                   "quota_exceeded",
+                  "invalid_email",
+                  "signup_rate_limited",
                   "admin_disabled",
                   "admin_unauthorized"
                 ],
-                "description": "Most codes carry HTTP 400. Exceptions: key_required and invalid_api_key are 401; quota_exceeded is 429; not_found is 404; internal_error is 500; admin_disabled is 503 and admin_unauthorized is 401 (admin API only). NOTE: the invalid-monthly_limit case on POST /admin/api-keys is returned with code \"missing_param\" (message key monthly_limit_integer) — monthly_limit_integer is an internal message key, NOT a distinct error code."
+                "description": "Most codes carry HTTP 400. Exceptions: key_required and invalid_api_key are 401; quota_exceeded and signup_rate_limited are 429; not_found is 404; internal_error is 500; admin_disabled is 503 and admin_unauthorized is 401 (admin API only). invalid_email is 400 and signup_rate_limited is 429 (POST /api/v1/signup only). NOTE: the invalid-monthly_limit case on POST /admin/api-keys is returned with code \"missing_param\" (message key monthly_limit_integer) — monthly_limit_integer is an internal message key, NOT a distinct error code."
               },
               "message": { "type": "string", "description": "錯誤訊息，預設 zh-TW；依請求的 lang 在地化。Malformed-JSON errors (invalid_json) and invalid_lang itself are always zh-TW because the requested lang cannot be honored. Always key program logic off code — never off the message text." }
             }

@@ -70,12 +70,61 @@ a:hover { text-decoration: underline; }
   letter-spacing: 0.3em;
 }
 
+.site-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.1rem;
+}
+
 .site-nav a {
   color: var(--muted);
   font-size: 0.9rem;
   letter-spacing: 0.1em;
 }
 .site-nav a:hover { color: var(--gold); }
+
+/* ---------- 首頁導言與特色 ---------- */
+
+.hero {
+  text-align: center;
+  max-width: 720px;
+  margin: 1.75rem auto 0;
+  padding: 0 0.5rem;
+}
+
+.hero-sub {
+  color: var(--muted);
+  font-size: 1.02rem;
+  line-height: 1.75;
+  letter-spacing: 0.02em;
+  margin: 0;
+}
+
+.feature-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.55rem 0.75rem;
+  list-style: none;
+  margin: 1.15rem 0 0;
+  padding: 0;
+}
+
+.feature-strip li {
+  color: var(--gold);
+  font-size: 0.82rem;
+  letter-spacing: 0.1em;
+  padding: 0.28rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(211, 184, 119, 0.05);
+}
+
+.footer-cta {
+  margin: 0 0 0.45rem;
+  color: var(--ink);
+}
+.footer-cta a { letter-spacing: 0.08em; }
 
 .site-tools {
   display: flex;
