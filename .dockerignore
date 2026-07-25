@@ -1,9 +1,0 @@
-.git
-tmp
-web/tmp
-web/spec
-web/data
-spec
-*.gem
-Dockerfile
-fly.toml

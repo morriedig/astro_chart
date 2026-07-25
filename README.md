@@ -289,18 +289,8 @@ bundle install
 rake spec
 ```
 
-### Web app (`web/`)
-
-```bash
-cd web
-bundle install
-bundle exec rackup -p 9292   # http://localhost:9292
-bundle exec rspec            # request specs
-```
-
-Deploy: `fly deploy` from the repo root (config in `fly.toml`; the Docker
-build context is the repo root because `web/Gemfile` references the gem
-via `path: ".."`).
+The hosted web app and MCP server that build on this gem live in a
+separate repository and depend on `astro_chart` as a normal gem.
 
 ## License
 
