@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.png" alt="AstroChart — Pure-Ruby astrology chart calculation" width="600">
+</p>
+
 # AstroChart
 
 Pure-Ruby gem for astrology chart calculation: apparent planetary
