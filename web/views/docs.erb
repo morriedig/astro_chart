@@ -160,6 +160,7 @@
   <ol>
     <li><a href="#overview">總覽</a></li>
     <li><a href="#i18n">多語言（lang）</a></li>
+    <li><a href="#auth">驗證與用量（API 金鑰）</a></li>
     <li><a href="#health">GET /api/v1/health</a></li>
     <li><a href="#charts">POST /api/v1/charts</a></li>
     <li><a href="#synastry">POST /api/v1/synastry</a></li>
@@ -172,22 +173,23 @@
     <li><a href="#errors">錯誤碼</a></li>
     <li><a href="#limits">限制</a></li>
     <li><a href="#examples">程式範例</a></li>
+    <li><a href="#admin">管理 API（營運用）</a></li>
     <li><a href="#openapi">OpenAPI 規格</a></li>
   </ol>
 </nav>
 
 <h2 id="overview">總覽</h2>
 <p>Base URL 為 <strong>同源（same-origin）</strong>：所有路徑皆為相對路徑（例如 <code>/api/v1/charts</code>），直接對本站發送請求即可。</p>
-<p>本 API 目前為 <strong>Beta 狀態、完全開放</strong>：</p>
+<p>本 API 目前為 <strong>Beta、開放測試（open beta）狀態</strong>：</p>
 <ul>
-  <li>無需 API key、無需註冊</li>
+  <li><strong>無需 API 金鑰、無需註冊</strong>即可呼叫（伺服器目前為 <code>API_KEY_MODE=open</code>）</li>
   <li>無限流（rate limit）</li>
   <li>免費使用</li>
 </ul>
 <div class="note">
-  <strong>注意：</strong>Beta 期間介面可能調整，未來可能加入認證機制。正式整合前請留意公告。
+  <strong>API 金鑰為選填：</strong>你可自行帶上金鑰把用量歸戶到該金鑰，並用 <a href="#usage">GET /api/v1/usage</a> 查詢自己的用量。目前開放模式下<strong>不帶金鑰也能正常呼叫</strong>；未來伺服器可能切換為 <code>required</code> 模式，屆時匿名呼叫將回 401 <code>key_required</code>。金鑰的取得、傳遞方式與用量端點詳見<a href="#auth">驗證與用量</a>。
 </div>
-<p>所有請求與回應皆為 JSON（<code>Content-Type: application/json</code>）。所有 <code>/api</code> 回應皆帶有 <code>Access-Control-Allow-Origin: *</code>，可直接從瀏覽器跨域呼叫；<code>OPTIONS /api/v1/*</code> 預檢請求回傳 <code>204</code>，並帶 <code>Access-Control-Allow-Methods: POST,GET,OPTIONS</code> 與 <code>Access-Control-Allow-Headers: Content-Type</code>。</p>
+<p>所有請求與回應皆為 JSON（<code>Content-Type: application/json</code>）。所有 <code>/api</code> 回應皆帶有 <code>Access-Control-Allow-Origin: *</code>，可直接從瀏覽器跨域呼叫；<code>OPTIONS /api/v1/*</code> 預檢請求回傳 <code>204</code>，並帶 <code>Access-Control-Allow-Methods: POST,GET,OPTIONS</code> 與 <code>Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key</code>。</p>
 <p>機器可讀的完整規格見 <a href="/openapi.json">/openapi.json</a>（OpenAPI 3.1）。</p>
 
 <h3 id="birth-object">出生資料物件（共用格式）</h3>
@@ -271,6 +273,111 @@
     }
   }
 }</code></pre>
+
+<h2 id="auth">驗證與用量（API 金鑰）</h2>
+<p>API 金鑰讓你把呼叫用量歸戶、設定每月用量上限，並查詢自己的用量。是否強制帶金鑰由伺服器環境變數 <code>API_KEY_MODE</code> 控制：</p>
+<div class="table-scroll">
+<table>
+  <tr><th><code>API_KEY_MODE</code></th><th>行為</th></tr>
+  <tr><td><code>open</code>（預設，<strong>本站目前狀態</strong>）</td><td>金鑰<strong>選填</strong>。不帶金鑰＝匿名呼叫，一切正常；帶了金鑰則把該次用量計入該金鑰。</td></tr>
+  <tr><td><code>required</code></td><td>金鑰<strong>必填</strong>。所有計費端點的匿名呼叫回 401 <code>key_required</code>。</td></tr>
+</table>
+</div>
+<div class="note">
+  <strong>目前為 <code>open</code> 模式：</strong>你現在完全不帶金鑰也能呼叫本站所有端點（唯一例外是 <a href="#usage">GET /api/v1/usage</a>，因為匿名用量無從歸戶，即使在 open 模式也需要金鑰）。以下關於金鑰的說明是為了讓你在需要時（或伺服器日後切換為 <code>required</code>）能無痛接上。
+</div>
+
+<h3>傳遞金鑰的方式</h3>
+<p>金鑰長相為 <code>ak_XXXXXXXX…</code>。以下<strong>任一種</strong>方式擇一即可（優先序：<code>Authorization</code> &gt; <code>X-API-Key</code> &gt; <code>?api_key=</code>）：</p>
+<div class="table-scroll">
+<table>
+  <tr><th>方式</th><th>範例</th></tr>
+  <tr><td>請求標頭 <code>Authorization: Bearer</code></td><td><code>Authorization: Bearer ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ</code></td></tr>
+  <tr><td>請求標頭 <code>X-API-Key</code></td><td><code>X-API-Key: ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ</code></td></tr>
+  <tr><td>查詢參數 <code>?api_key=</code></td><td><code>/api/v1/cities?q=tai&amp;api_key=ak_7hgEJAyQ…</code></td></tr>
+</table>
+</div>
+<div class="note">
+  <strong>CORS：</strong>預檢（<code>OPTIONS /api/v1/*</code>）已允許 <code>Content-Type, Authorization, X-API-Key</code> 標頭，可直接從瀏覽器帶金鑰跨域呼叫。
+</div>
+
+<h3>哪些端點會驗證並計入用量（計費端點）</h3>
+<p>下列端點在 <code>open</code> 模式允許匿名，成功（HTTP 200）時計入用量一次；在 <code>required</code> 模式則必須帶金鑰：</p>
+<ul>
+  <li><code>POST /api/v1/charts</code>、<code>/synastry</code>、<code>/transits</code>、<code>/progressions</code>、<code>/composite</code>、<code>/solar-return</code></li>
+  <li><code>GET /api/v1/cities</code></li>
+</ul>
+<p><strong>不計入用量</strong>：<code>GET /api/v1/health</code>（永遠公開、免金鑰）與 <code>GET /api/v1/usage</code>（需金鑰，但查詢自身用量本身不計費）。</p>
+
+<h3>金鑰相關錯誤</h3>
+<div class="table-scroll">
+<table>
+  <tr><th>HTTP</th><th>code</th><th>觸發條件</th><th>回應範例</th></tr>
+  <tr><td>401</td><td><code>key_required</code></td><td><code>required</code> 模式下匿名呼叫計費端點；或任何模式下呼叫 <code>/usage</code> 卻未帶金鑰</td><td><code>{"error":{"code":"key_required","message":"此端點需要 API 金鑰"}}</code></td></tr>
+  <tr><td>401</td><td><code>invalid_api_key</code></td><td>金鑰不存在或已被撤銷（revoked）</td><td><code>{"error":{"code":"invalid_api_key","message":"API 金鑰無效或已撤銷"}}</code></td></tr>
+  <tr><td>429</td><td><code>quota_exceeded</code></td><td>該金鑰本月用量已達其 <code>monthly_limit</code> 上限（訊息內含上限次數）</td><td><code>{"error":{"code":"quota_exceeded","message":"已超過本月用量上限（1 次）"}}</code></td></tr>
+</table>
+</div>
+<div class="note">
+  這三個金鑰錯誤的 HTTP 狀態<strong>不是 400</strong>（<code>key_required</code>／<code>invalid_api_key</code> 為 <strong>401</strong>、<code>quota_exceeded</code> 為 <strong>429</strong>），與<a href="#errors">錯誤碼</a>一節中其餘 400 類參數錯誤不同——請以 <code>code</code> 判斷錯誤種類。用量上限只在該金鑰設有 <code>monthly_limit</code>（非 <code>null</code>）時才會觸發 429。
+</div>
+
+<h3 id="usage">查詢用量</h3>
+<div class="endpoint-sig"><span class="method get">GET</span><span>/api/v1/usage</span></div>
+<p>查詢<strong>目前金鑰</strong>當月的用量摘要。此端點<strong>一定需要金鑰</strong>（即使在 <code>open</code> 模式；匿名用量無從歸戶），且<strong>本身不計費、不翻譯</strong>（回應無詞彙欄位）。也接受 <code>?lang=</code>，但只影響錯誤訊息的語言（如 <code>key_required</code>／<code>invalid_api_key</code>），不影響資料內容。</p>
+<p class="req-label">請求範例</p>
+<pre><code>curl -s https://your-host/api/v1/usage \
+  -H "Authorization: Bearer ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ"</code></pre>
+<p class="req-label">回應 200（實際輸出）</p>
+<pre><code>{
+  "data": {
+    "key": {
+      "prefix": "ak_7hgEJAyQ",
+      "label": "Acme Web App",
+      "tier": "free"
+    },
+    "month": "2026-07",
+    "total": 5,
+    "monthly_limit": 1000,
+    "remaining": 995,
+    "by_endpoint": {
+      "charts": 2,
+      "cities": 2,
+      "synastry": 1
+    },
+    "by_day": {
+      "2026-07-25": 5
+    }
+  }
+}</code></pre>
+<div class="table-scroll">
+<table>
+  <tr><th>欄位</th><th>型別</th><th>說明</th></tr>
+  <tr><td><code>key.prefix</code></td><td>string</td><td>金鑰前綴（<code>ak_</code> ＋ 8 碼，共 11 字），可安全顯示；完整金鑰不會回傳</td></tr>
+  <tr><td><code>key.label</code></td><td>string</td><td>建立金鑰時給的標籤</td></tr>
+  <tr><td><code>key.tier</code></td><td>string</td><td>方案級別（如 <code>free</code>／<code>pro</code>，僅為標記）</td></tr>
+  <tr><td><code>month</code></td><td>string</td><td>統計月份 <code>YYYY-MM</code>（UTC）</td></tr>
+  <tr><td><code>total</code></td><td>integer</td><td>本月總計費呼叫數</td></tr>
+  <tr><td><code>monthly_limit</code></td><td>integer &#124; null</td><td>每月上限；<code>null</code> 表示無上限</td></tr>
+  <tr><td><code>remaining</code></td><td>integer &#124; null</td><td>本月剩餘可用次數（<code>max(limit − total, 0)</code>）；無上限時為 <code>null</code></td></tr>
+  <tr><td><code>by_endpoint</code></td><td>object</td><td>各端點呼叫數（端點名為去掉 <code>/api/v1/</code> 前綴的鍵，如 <code>charts</code>），依次數由多到少排序</td></tr>
+  <tr><td><code>by_day</code></td><td>object</td><td>本月各日（<code>YYYY-MM-DD</code>）呼叫數，依日期升冪排序</td></tr>
+</table>
+</div>
+
+<h3>計費端點帶金鑰的呼叫範例</h3>
+<pre><code># Authorization: Bearer（本命盤）
+curl -s -X POST https://your-host/api/v1/charts \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ" \
+  -d '{"birth_date":"1990-01-01","birth_time":"12:00","latitude":25.033,"longitude":121.5654,"timezone":"Asia/Taipei"}'
+
+# X-API-Key 標頭（城市搜尋）
+curl -s "https://your-host/api/v1/cities?q=tai" \
+  -H "X-API-Key: ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ"
+
+# 查詢參數 ?api_key=（城市搜尋）
+curl -s "https://your-host/api/v1/cities?q=tokyo&amp;api_key=ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ"</code></pre>
 
 <h2 id="health">健康檢查</h2>
 <div class="endpoint-sig"><span class="method get">GET</span><span>/api/v1/health</span></div>
@@ -818,7 +925,7 @@
 <h2 id="errors">錯誤碼</h2>
 <p>所有錯誤皆回傳 JSON，格式為：</p>
 <pre><code>{ "error": { "code": "&lt;code&gt;", "message": "&lt;訊息（預設中文，依 lang 在地化）&gt;" } }</code></pre>
-<p><code>message</code> 會依請求的 <code>lang</code> 在地化（見<a href="#i18n">多語言</a>；主體無法解析或 <code>lang</code> 本身無效時固定 zh-TW）；<code>code</code> 與語言無關，下表範例皆為預設 zh-TW 訊息。</p>
+<p><code>message</code> 會依請求的 <code>lang</code> 在地化（見<a href="#i18n">多語言</a>；主體無法解析或 <code>lang</code> 本身無效時固定 zh-TW）；<code>code</code> 與語言無關，下表範例皆為預設 zh-TW 訊息。<strong>大多數參數錯誤為 HTTP 400</strong>，但金鑰相關錯誤帶不同狀態（<code>key_required</code>／<code>invalid_api_key</code> 為 <strong>401</strong>、<code>quota_exceeded</code> 為 <strong>429</strong>）——請務必以 <code>code</code> 而非 HTTP 狀態或訊息文字判斷錯誤種類。</p>
 <div class="table-scroll">
 <table>
   <tr><th>HTTP</th><th>code</th><th>觸發條件</th><th>回應範例</th></tr>
@@ -832,6 +939,9 @@
   <tr><td>400</td><td><code>invalid_lang</code></td><td><code>lang</code> 不是支援的語言（<code>zh-TW</code>／<code>zh-tw</code>／<code>zh_tw</code>／<code>zh</code>／<code>en</code>／<code>ja</code>／<code>ko</code>，不分大小寫；<strong>空字串也算無效</strong>）。此錯誤訊息固定為 zh-TW</td><td><code>{"error":{"code":"invalid_lang","message":"不支援的語言：fr（支援 zh-TW / en / ja / ko）"}}</code></td></tr>
   <tr><td>400</td><td><code>polar_latitude</code></td><td>極區緯度（約 |緯度| ≥ 66°）使 Placidus 宮位無解（整宮制 <code>W</code> 不受此限）</td><td><code>{"error":{"code":"polar_latitude","message":"極區緯度無法計算 Placidus 宮位"}}</code></td></tr>
   <tr><td>400</td><td><code>date_out_of_range</code></td><td>任一計算時刻（出生日期、行運 <code>at</code>、推運目標、回歸年份）超出冥王星可計算範圍（1885–2099）</td><td><code>{"error":{"code":"date_out_of_range","message":"日期超出可計算範圍（1885–2099）"}}</code></td></tr>
+  <tr><td><strong>401</strong></td><td><code>key_required</code></td><td>需要 API 金鑰但未提供（<code>required</code> 模式的計費端點，或任何模式的 <code>/usage</code>）。詳見<a href="#auth">驗證與用量</a></td><td><code>{"error":{"code":"key_required","message":"此端點需要 API 金鑰"}}</code></td></tr>
+  <tr><td><strong>401</strong></td><td><code>invalid_api_key</code></td><td>提供的金鑰不存在或已被撤銷</td><td><code>{"error":{"code":"invalid_api_key","message":"API 金鑰無效或已撤銷"}}</code></td></tr>
+  <tr><td><strong>429</strong></td><td><code>quota_exceeded</code></td><td>該金鑰本月用量已達 <code>monthly_limit</code> 上限（訊息含上限次數）</td><td><code>{"error":{"code":"quota_exceeded","message":"已超過本月用量上限（1 次）"}}</code></td></tr>
   <tr><td>404</td><td><code>not_found</code></td><td>不存在的 <code>/api</code> 路徑</td><td><code>{"error":{"code":"not_found","message":"找不到此 API 路徑"}}</code></td></tr>
   <tr><td>500</td><td><code>internal_error</code></td><td>未預期的伺服器錯誤（不洩漏堆疊資訊）</td><td><code>{"error":{"code":"internal_error","message":"伺服器內部錯誤，請稍後再試"}}</code></td></tr>
 </table>
@@ -925,6 +1035,86 @@ if res.is_a?(Net::HTTPSuccess)
 else
   warn "#{json.dig("error", "code")}: #{json.dig("error", "message")}"
 end</code></pre>
+
+<h2 id="admin">管理 API（營運用）</h2>
+<div class="note">
+  <strong>此區僅供營運者（operator）使用</strong>，不是給一般 API 消費者的。所有 <code>/admin/api-keys</code>、<code>/admin/usage</code> 端點都由伺服器機密 <code>ADMIN_TOKEN</code> 保護，用來簽發／撤銷 API 金鑰與檢視全站用量。
+</div>
+<p>驗證方式：以 <code>Authorization: Bearer &lt;ADMIN_TOKEN&gt;</code> 傳入伺服器設定的密鑰（與 API 金鑰無關，是另一組營運機密）。</p>
+<div class="table-scroll">
+<table>
+  <tr><th>HTTP</th><th>code</th><th>觸發條件</th><th>回應範例</th></tr>
+  <tr><td>503</td><td><code>admin_disabled</code></td><td>伺服器未設定 <code>ADMIN_TOKEN</code>（管理 API 整個停用）</td><td><code>{"error":{"code":"admin_disabled","message":"管理介面未啟用"}}</code></td></tr>
+  <tr><td>401</td><td><code>admin_unauthorized</code></td><td>提供的 <code>ADMIN_TOKEN</code> 錯誤</td><td><code>{"error":{"code":"admin_unauthorized","message":"管理權杖無效"}}</code></td></tr>
+</table>
+</div>
+
+<h3>建立金鑰</h3>
+<div class="endpoint-sig"><span class="method post">POST</span><span>/admin/api-keys</span></div>
+<p>請求主體：<code>{"label":"...","tier":"free","monthly_limit":1000|null}</code>（<code>monthly_limit</code> 為 <code>null</code> 表示無上限；須為非負整數或 <code>null</code>）。</p>
+<p class="req-label">回應 201（實際輸出）</p>
+<pre><code>{
+  "data": {
+    "id": 1,
+    "token": "ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ",
+    "prefix": "ak_7hgEJAyQ",
+    "label": "Acme Web App",
+    "tier": "free",
+    "monthly_limit": 1000,
+    "created_at": "2026-07-25T04:55:45Z"
+  }
+}</code></pre>
+<div class="note">
+  <strong>明文 <code>token</code> 只在建立當下回傳這一次</strong>（伺服器只保存其 SHA-256 雜湊），之後任何端點都不會再吐出完整金鑰——請當場保存並交給使用者。
+</div>
+<div class="note">
+  <strong>實作注意：</strong><code>monthly_limit</code> 若為負數或非整數（如字串），回 <strong>400，但 <code>code</code> 為 <code>missing_param</code></strong>（訊息為「<code>monthly_limit</code> 必須為非負整數或留空」），並非另一組專屬錯誤碼。<code>label</code> 省略時預設空字串、<code>tier</code> 省略時預設 <code>"free"</code>。
+</div>
+
+<h3>列出金鑰</h3>
+<div class="endpoint-sig"><span class="method get">GET</span><span>/admin/api-keys</span></div>
+<p>依 <code>id</code> 由新到舊列出所有金鑰，<strong>不含 token／雜湊</strong>。</p>
+<p class="req-label">回應 200（實際輸出，節錄）</p>
+<pre><code>{
+  "data": [
+    {
+      "id": 3, "prefix": "ak_IVRZsXlz", "label": "tiny", "tier": "free",
+      "monthly_limit": 1, "created_at": "2026-07-25T04:55:45Z", "revoked_at": null
+    },
+    {
+      "id": 1, "prefix": "ak_7hgEJAyQ", "label": "Acme Web App", "tier": "free",
+      "monthly_limit": 1000, "created_at": "2026-07-25T04:55:45Z", "revoked_at": null
+    }
+    // …其餘省略
+  ]
+}</code></pre>
+<p><code>revoked_at</code> 為 <code>null</code> 表示金鑰仍有效；已撤銷者帶 UTC 時間字串。</p>
+
+<h3>撤銷金鑰</h3>
+<div class="endpoint-sig"><span class="method options" style="background: rgba(200,120,120,0.15); color:#e0a0a0; border:1px solid rgba(200,120,120,0.3);">DELETE</span><span>/admin/api-keys/:id</span></div>
+<p>撤銷指定金鑰；撤銷後該金鑰立即失效（之後呼叫回 401 <code>invalid_api_key</code>）。</p>
+<p class="req-label">回應 200（實際輸出）</p>
+<pre><code>{ "data": { "id": 1, "revoked": true } }</code></pre>
+<div class="note">
+  <strong>實作注意：</strong>找不到該 <code>id</code>（或已撤銷）時回 <strong>404</strong>，主體為 JSON 錯誤物件 <code>{"error":{"code":"not_found",…}}</code>。
+</div>
+
+<h3>全站用量</h3>
+<div class="endpoint-sig"><span class="method get">GET</span><span>/admin/usage?month=YYYY-MM</span></div>
+<p>檢視某月（省略 <code>month</code> 時為當月 UTC）的全站用量。<code>by_key</code> 以金鑰 <code>id</code> 為鍵對應該金鑰呼叫數，匿名呼叫歸在 <code>"anonymous"</code>。</p>
+<p class="req-label">回應 200（實際輸出）</p>
+<pre><code>{
+  "data": {
+    "month": "2026-07",
+    "total": 7,
+    "by_endpoint": { "cities": 3, "charts": 3, "synastry": 1 },
+    "by_key": { "1": 5, "anonymous": 1, "3": 1 }
+  }
+}</code></pre>
+
+<h3>瀏覽器管理頁</h3>
+<div class="endpoint-sig"><span class="method get">GET</span><span>/admin</span></div>
+<p>另提供一個瀏覽器管理頁面 <a href="/admin"><code>/admin</code></a>：這是一個<strong>公開的外殼頁</strong>（頁面本身免驗證即可載入），會在前端提示輸入 <code>ADMIN_TOKEN</code>，再以該權杖呼叫上述管理 API。實際操作仍受 <code>ADMIN_TOKEN</code> 保護。</p>
 
 <h2 id="openapi">OpenAPI 規格</h2>
 <p>完整的機器可讀 API 規格（OpenAPI 3.1，含所有端點的請求／回應 schema 與範例）：<a href="/openapi.json"><code>GET /openapi.json</code></a>。可直接匯入 Swagger UI、Postman、Insomnia 等工具。</p>

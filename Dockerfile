@@ -1,6 +1,6 @@
 FROM ruby:3.2-slim
 
-RUN apt-get update -qq && apt-get install -y --no-install-recommends build-essential \
+RUN apt-get update -qq && apt-get install -y --no-install-recommends build-essential libsqlite3-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # The web app's Gemfile references the astro_chart gem via path: "..",

@@ -7,3 +7,4 @@ pkg/
 *.gem
 Gemfile.lock
 .gstack/
+web/data/

@@ -160,6 +160,7 @@
   <ol>
     <li><a href="#overview">Overview</a></li>
     <li><a href="#i18n">Languages (lang)</a></li>
+    <li><a href="#auth">Authentication &amp; Usage (API keys)</a></li>
     <li><a href="#health">GET /api/v1/health</a></li>
     <li><a href="#charts">POST /api/v1/charts</a></li>
     <li><a href="#synastry">POST /api/v1/synastry</a></li>
@@ -172,22 +173,23 @@
     <li><a href="#errors">Error Codes</a></li>
     <li><a href="#limits">Limitations</a></li>
     <li><a href="#examples">Code Examples</a></li>
+    <li><a href="#admin">Admin API (operators only)</a></li>
     <li><a href="#openapi">OpenAPI Specification</a></li>
   </ol>
 </nav>
 
 <h2 id="overview">Overview</h2>
 <p>The base URL is <strong>same-origin</strong>: all paths are relative (e.g. <code>/api/v1/charts</code>) — send requests directly to this site.</p>
-<p>The API is currently in <strong>Beta and fully open</strong>:</p>
+<p>The API is currently in <strong>Beta, open-beta mode</strong>:</p>
 <ul>
-  <li>No API key, no registration</li>
+  <li><strong>No API key and no registration required</strong> to call it (the server is currently <code>API_KEY_MODE=open</code>)</li>
   <li>No rate limit</li>
   <li>Free to use</li>
 </ul>
 <div class="note">
-  <strong>Note:</strong> the interface may change during Beta, and authentication may be added later. Watch for announcements before integrating in production.
+  <strong>API keys are optional:</strong> you may attach a key to attribute your usage to it and inspect your own consumption via <a href="#usage">GET /api/v1/usage</a>. In the current open mode <strong>calls without a key work fine</strong>; the server may later switch to <code>required</code> mode, at which point anonymous calls return 401 <code>key_required</code>. See <a href="#auth">Authentication &amp; Usage</a> for how to obtain and pass keys and for the usage endpoint.
 </div>
-<p>All requests and responses are JSON (<code>Content-Type: application/json</code>). Every <code>/api</code> response carries <code>Access-Control-Allow-Origin: *</code>, so the API can be called cross-origin straight from a browser; <code>OPTIONS /api/v1/*</code> preflight requests return <code>204</code> with <code>Access-Control-Allow-Methods: POST,GET,OPTIONS</code> and <code>Access-Control-Allow-Headers: Content-Type</code>.</p>
+<p>All requests and responses are JSON (<code>Content-Type: application/json</code>). Every <code>/api</code> response carries <code>Access-Control-Allow-Origin: *</code>, so the API can be called cross-origin straight from a browser; <code>OPTIONS /api/v1/*</code> preflight requests return <code>204</code> with <code>Access-Control-Allow-Methods: POST,GET,OPTIONS</code> and <code>Access-Control-Allow-Headers: Content-Type, Authorization, X-API-Key</code>.</p>
 <p>Response vocabulary (planet / zodiac / aspect names, etc.) defaults to Traditional Chinese; pass <code>lang</code> to get English, Japanese, or Korean — see <a href="#i18n">Languages</a>.</p>
 <p>The full machine-readable specification lives at <a href="/openapi.json">/openapi.json</a> (OpenAPI 3.1).</p>
 
@@ -281,6 +283,111 @@
 <div class="note">
   The JSON examples elsewhere on this page show the <strong>default zh-TW vocabulary</strong> (e.g. <code>太陽</code> = Sun, <code>摩羯座</code> = Capricorn) exactly as the API returns them without <code>lang</code>. Add <code>"lang": "en"</code> to any request to receive the English vocabulary instead — the structure is identical.
 </div>
+
+<h2 id="auth">Authentication &amp; Usage (API keys)</h2>
+<p>API keys let you attribute your calls, set a monthly usage cap, and inspect your own usage. Whether a key is mandatory is controlled by the server environment variable <code>API_KEY_MODE</code>:</p>
+<div class="table-scroll">
+<table>
+  <tr><th><code>API_KEY_MODE</code></th><th>Behavior</th></tr>
+  <tr><td><code>open</code> (default, <strong>this server's current state</strong>)</td><td>Key is <strong>optional</strong>. No key = an anonymous call, everything works; with a key, the call is counted against that key.</td></tr>
+  <tr><td><code>required</code></td><td>Key is <strong>mandatory</strong>. Anonymous calls to any billable endpoint return 401 <code>key_required</code>.</td></tr>
+</table>
+</div>
+<div class="note">
+  <strong>Currently <code>open</code> mode:</strong> you can call every endpoint on this server with no key at all — the one exception is <a href="#usage">GET /api/v1/usage</a>, which needs a key even in open mode because anonymous usage cannot be attributed. The key details below are so you can wire keys up when you need them (or when the server later switches to <code>required</code>).
+</div>
+
+<h3>Passing a key</h3>
+<p>Keys look like <code>ak_XXXXXXXX…</code>. Use <strong>any one</strong> of the following (precedence: <code>Authorization</code> &gt; <code>X-API-Key</code> &gt; <code>?api_key=</code>):</p>
+<div class="table-scroll">
+<table>
+  <tr><th>Method</th><th>Example</th></tr>
+  <tr><td>Request header <code>Authorization: Bearer</code></td><td><code>Authorization: Bearer ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ</code></td></tr>
+  <tr><td>Request header <code>X-API-Key</code></td><td><code>X-API-Key: ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ</code></td></tr>
+  <tr><td>Query parameter <code>?api_key=</code></td><td><code>/api/v1/cities?q=tai&amp;api_key=ak_7hgEJAyQ…</code></td></tr>
+</table>
+</div>
+<div class="note">
+  <strong>CORS:</strong> the preflight (<code>OPTIONS /api/v1/*</code>) allows the <code>Content-Type, Authorization, X-API-Key</code> headers, so you can send a key cross-origin straight from a browser.
+</div>
+
+<h3>Which endpoints authenticate and count usage (billable)</h3>
+<p>The following endpoints allow anonymous calls in <code>open</code> mode and count one unit of usage on success (HTTP 200); in <code>required</code> mode they require a key:</p>
+<ul>
+  <li><code>POST /api/v1/charts</code>, <code>/synastry</code>, <code>/transits</code>, <code>/progressions</code>, <code>/composite</code>, <code>/solar-return</code></li>
+  <li><code>GET /api/v1/cities</code></li>
+</ul>
+<p><strong>Not counted</strong>: <code>GET /api/v1/health</code> (always public, no key) and <code>GET /api/v1/usage</code> (requires a key, but inspecting your own usage is itself free).</p>
+
+<h3>Key-related errors</h3>
+<div class="table-scroll">
+<table>
+  <tr><th>HTTP</th><th>code</th><th>Trigger</th><th>Example response</th></tr>
+  <tr><td>401</td><td><code>key_required</code></td><td>A billable endpoint is called anonymously in <code>required</code> mode; or <code>/usage</code> is called with no key in any mode</td><td><code>{"error":{"code":"key_required","message":"此端點需要 API 金鑰"}}</code></td></tr>
+  <tr><td>401</td><td><code>invalid_api_key</code></td><td>The key does not exist or has been revoked</td><td><code>{"error":{"code":"invalid_api_key","message":"API 金鑰無效或已撤銷"}}</code></td></tr>
+  <tr><td>429</td><td><code>quota_exceeded</code></td><td>The key's usage this month has reached its <code>monthly_limit</code> (the message includes the limit)</td><td><code>{"error":{"code":"quota_exceeded","message":"已超過本月用量上限（1 次）"}}</code></td></tr>
+</table>
+</div>
+<div class="note">
+  These three key errors carry HTTP statuses that are <strong>not 400</strong> (<code>key_required</code> / <code>invalid_api_key</code> are <strong>401</strong>, <code>quota_exceeded</code> is <strong>429</strong>), unlike the 400-class parameter errors in the <a href="#errors">Error Codes</a> section — always branch on <code>code</code>. The 429 only ever fires for a key that has a non-null <code>monthly_limit</code>. (Example messages above are shown in the default zh-TW; with <code>lang=en</code> they read e.g. "This endpoint requires an API key", "API key is invalid or has been revoked", "Monthly usage limit exceeded (1 calls)".)
+</div>
+
+<h3 id="usage">Inspecting usage</h3>
+<div class="endpoint-sig"><span class="method get">GET</span><span>/api/v1/usage</span></div>
+<p>Returns a usage summary for <strong>the current key</strong> in the current month. This endpoint <strong>always requires a key</strong> (even in <code>open</code> mode — anonymous usage cannot be attributed) and is <strong>itself not billed and not translated</strong> (the response has no vocabulary fields). It also accepts <code>?lang=</code>, but that only affects the language of error messages (such as <code>key_required</code> / <code>invalid_api_key</code>), never the data.</p>
+<p class="req-label">Request example</p>
+<pre><code>curl -s https://your-host/api/v1/usage \
+  -H "Authorization: Bearer ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ"</code></pre>
+<p class="req-label">Response 200 (actual output)</p>
+<pre><code>{
+  "data": {
+    "key": {
+      "prefix": "ak_7hgEJAyQ",
+      "label": "Acme Web App",
+      "tier": "free"
+    },
+    "month": "2026-07",
+    "total": 5,
+    "monthly_limit": 1000,
+    "remaining": 995,
+    "by_endpoint": {
+      "charts": 2,
+      "cities": 2,
+      "synastry": 1
+    },
+    "by_day": {
+      "2026-07-25": 5
+    }
+  }
+}</code></pre>
+<div class="table-scroll">
+<table>
+  <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>key.prefix</code></td><td>string</td><td>Key prefix (<code>ak_</code> + 8 chars, 11 total); safe to display. The full key is never returned</td></tr>
+  <tr><td><code>key.label</code></td><td>string</td><td>The label given when the key was created</td></tr>
+  <tr><td><code>key.tier</code></td><td>string</td><td>Plan tier (e.g. <code>free</code> / <code>pro</code>; a label only)</td></tr>
+  <tr><td><code>month</code></td><td>string</td><td>Reporting month <code>YYYY-MM</code> (UTC)</td></tr>
+  <tr><td><code>total</code></td><td>integer</td><td>Total billable calls this month</td></tr>
+  <tr><td><code>monthly_limit</code></td><td>integer &#124; null</td><td>Monthly cap; <code>null</code> means unlimited</td></tr>
+  <tr><td><code>remaining</code></td><td>integer &#124; null</td><td>Calls left this month (<code>max(limit − total, 0)</code>); <code>null</code> when unlimited</td></tr>
+  <tr><td><code>by_endpoint</code></td><td>object</td><td>Calls per endpoint (keyed by the name without the <code>/api/v1/</code> prefix, e.g. <code>charts</code>), sorted most-used first</td></tr>
+  <tr><td><code>by_day</code></td><td>object</td><td>Calls per day (<code>YYYY-MM-DD</code>) this month, sorted ascending by date</td></tr>
+</table>
+</div>
+
+<h3>Calling billable endpoints with a key</h3>
+<pre><code># Authorization: Bearer (natal chart)
+curl -s -X POST https://your-host/api/v1/charts \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ" \
+  -d '{"birth_date":"1990-01-01","birth_time":"12:00","latitude":25.033,"longitude":121.5654,"timezone":"Asia/Taipei"}'
+
+# X-API-Key header (city search)
+curl -s "https://your-host/api/v1/cities?q=tai" \
+  -H "X-API-Key: ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ"
+
+# ?api_key= query parameter (city search)
+curl -s "https://your-host/api/v1/cities?q=tokyo&amp;api_key=ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ"</code></pre>
 
 <h2 id="health">Health Check</h2>
 <div class="endpoint-sig"><span class="method get">GET</span><span>/api/v1/health</span></div>
@@ -832,7 +939,7 @@
 <h2 id="errors">Error Codes</h2>
 <p>All errors return JSON in the form:</p>
 <pre><code>{ "error": { "code": "&lt;code&gt;", "message": "&lt;message (zh-TW by default, localized via lang)&gt;" } }</code></pre>
-<p><code>message</code> is localized to the request <code>lang</code> (see <a href="#i18n">Languages</a>; always zh-TW when the body is unreadable or <code>lang</code> itself is invalid); <code>code</code> is language-independent. The examples below show the default zh-TW messages.</p>
+<p><code>message</code> is localized to the request <code>lang</code> (see <a href="#i18n">Languages</a>; always zh-TW when the body is unreadable or <code>lang</code> itself is invalid); <code>code</code> is language-independent. The examples below show the default zh-TW messages. <strong>Most parameter errors are HTTP 400</strong>, but the key-related errors carry different statuses (<code>key_required</code> / <code>invalid_api_key</code> are <strong>401</strong>, <code>quota_exceeded</code> is <strong>429</strong>) — always identify the error by <code>code</code>, not by HTTP status or message text.</p>
 <div class="table-scroll">
 <table>
   <tr><th>HTTP</th><th>code</th><th>Trigger</th><th>Example response</th></tr>
@@ -846,6 +953,9 @@
   <tr><td>400</td><td><code>invalid_lang</code></td><td><code>lang</code> is not a supported language (<code>zh-TW</code>/<code>zh-tw</code>/<code>zh_tw</code>/<code>zh</code>/<code>en</code>/<code>ja</code>/<code>ko</code>, case-insensitive; <strong>the empty string is also invalid</strong>). This error message is always zh-TW</td><td><code>{"error":{"code":"invalid_lang","message":"不支援的語言：fr（支援 zh-TW / en / ja / ko）"}}</code></td></tr>
   <tr><td>400</td><td><code>polar_latitude</code></td><td>Polar latitude (roughly |latitude| ≥ 66°) makes Placidus houses unsolvable (Whole Sign <code>W</code> is unaffected)</td><td><code>{"error":{"code":"polar_latitude","message":"極區緯度無法計算 Placidus 宮位"}}</code></td></tr>
   <tr><td>400</td><td><code>date_out_of_range</code></td><td>Any computed moment (birth date, transit <code>at</code>, progression target, return year) is outside Pluto's computable range (1885–2099)</td><td><code>{"error":{"code":"date_out_of_range","message":"日期超出可計算範圍（1885–2099）"}}</code></td></tr>
+  <tr><td><strong>401</strong></td><td><code>key_required</code></td><td>An API key is required but was not supplied (a billable endpoint in <code>required</code> mode, or <code>/usage</code> in any mode). See <a href="#auth">Authentication &amp; Usage</a></td><td><code>{"error":{"code":"key_required","message":"此端點需要 API 金鑰"}}</code></td></tr>
+  <tr><td><strong>401</strong></td><td><code>invalid_api_key</code></td><td>The supplied key does not exist or has been revoked</td><td><code>{"error":{"code":"invalid_api_key","message":"API 金鑰無效或已撤銷"}}</code></td></tr>
+  <tr><td><strong>429</strong></td><td><code>quota_exceeded</code></td><td>The key's usage this month has reached its <code>monthly_limit</code> (message includes the limit)</td><td><code>{"error":{"code":"quota_exceeded","message":"已超過本月用量上限（1 次）"}}</code></td></tr>
   <tr><td>404</td><td><code>not_found</code></td><td>Nonexistent <code>/api</code> path</td><td><code>{"error":{"code":"not_found","message":"找不到此 API 路徑"}}</code></td></tr>
   <tr><td>500</td><td><code>internal_error</code></td><td>Unexpected server error (no stack traces leaked)</td><td><code>{"error":{"code":"internal_error","message":"伺服器內部錯誤，請稍後再試"}}</code></td></tr>
 </table>
@@ -944,6 +1054,86 @@ if res.is_a?(Net::HTTPSuccess)
 else
   warn "#{json.dig("error", "code")}: #{json.dig("error", "message")}"
 end</code></pre>
+
+<h2 id="admin">Admin API (operators only)</h2>
+<div class="note">
+  <strong>This section is for operators only</strong>, not for ordinary API consumers. Every <code>/admin/api-keys</code> and <code>/admin/usage</code> endpoint is protected by the server secret <code>ADMIN_TOKEN</code> and is used to issue / revoke API keys and inspect site-wide usage.
+</div>
+<p>Authentication: pass the server-configured secret as <code>Authorization: Bearer &lt;ADMIN_TOKEN&gt;</code> (this is a separate operator secret, unrelated to API keys).</p>
+<div class="table-scroll">
+<table>
+  <tr><th>HTTP</th><th>code</th><th>Trigger</th><th>Example response</th></tr>
+  <tr><td>503</td><td><code>admin_disabled</code></td><td>The server has no <code>ADMIN_TOKEN</code> set (the admin API is entirely disabled)</td><td><code>{"error":{"code":"admin_disabled","message":"管理介面未啟用"}}</code></td></tr>
+  <tr><td>401</td><td><code>admin_unauthorized</code></td><td>The supplied <code>ADMIN_TOKEN</code> is wrong</td><td><code>{"error":{"code":"admin_unauthorized","message":"管理權杖無效"}}</code></td></tr>
+</table>
+</div>
+
+<h3>Create a key</h3>
+<div class="endpoint-sig"><span class="method post">POST</span><span>/admin/api-keys</span></div>
+<p>Request body: <code>{"label":"...","tier":"free","monthly_limit":1000|null}</code> (<code>monthly_limit</code> of <code>null</code> means unlimited; it must be a non-negative integer or <code>null</code>).</p>
+<p class="req-label">Response 201 (actual output)</p>
+<pre><code>{
+  "data": {
+    "id": 1,
+    "token": "ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ",
+    "prefix": "ak_7hgEJAyQ",
+    "label": "Acme Web App",
+    "tier": "free",
+    "monthly_limit": 1000,
+    "created_at": "2026-07-25T04:55:45Z"
+  }
+}</code></pre>
+<div class="note">
+  <strong>The plaintext <code>token</code> is returned only once</strong>, at creation (the server stores only its SHA-256 hash); no endpoint ever returns the full key again — capture it then and hand it to the user.
+</div>
+<div class="note">
+  <strong>Implementation note:</strong> if <code>monthly_limit</code> is negative or not an integer (e.g. a string), the API returns <strong>400 but with <code>code</code> = <code>missing_param</code></strong> (message: "monthly_limit must be a non-negative integer or omitted"), not a dedicated error code. <code>label</code> defaults to an empty string and <code>tier</code> defaults to <code>"free"</code> when omitted.
+</div>
+
+<h3>List keys</h3>
+<div class="endpoint-sig"><span class="method get">GET</span><span>/admin/api-keys</span></div>
+<p>Lists all keys newest-<code>id</code>-first, <strong>never</strong> the token/hash.</p>
+<p class="req-label">Response 200 (actual output, excerpt)</p>
+<pre><code>{
+  "data": [
+    {
+      "id": 3, "prefix": "ak_IVRZsXlz", "label": "tiny", "tier": "free",
+      "monthly_limit": 1, "created_at": "2026-07-25T04:55:45Z", "revoked_at": null
+    },
+    {
+      "id": 1, "prefix": "ak_7hgEJAyQ", "label": "Acme Web App", "tier": "free",
+      "monthly_limit": 1000, "created_at": "2026-07-25T04:55:45Z", "revoked_at": null
+    }
+    // …more omitted
+  ]
+}</code></pre>
+<p><code>revoked_at</code> is <code>null</code> while the key is live; a revoked key carries a UTC timestamp.</p>
+
+<h3>Revoke a key</h3>
+<div class="endpoint-sig"><span class="method options" style="background: rgba(200,120,120,0.15); color:#e0a0a0; border:1px solid rgba(200,120,120,0.3);">DELETE</span><span>/admin/api-keys/:id</span></div>
+<p>Revokes the given key; it is invalid immediately afterwards (subsequent calls return 401 <code>invalid_api_key</code>).</p>
+<p class="req-label">Response 200 (actual output)</p>
+<pre><code>{ "data": { "id": 1, "revoked": true } }</code></pre>
+<div class="note">
+  <strong>Implementation note:</strong> when the <code>id</code> is unknown (or already revoked) the API returns <strong>404</strong> with a JSON error object <code>{"error":{"code":"not_found",…}}</code>.
+</div>
+
+<h3>Site-wide usage</h3>
+<div class="endpoint-sig"><span class="method get">GET</span><span>/admin/usage?month=YYYY-MM</span></div>
+<p>Site-wide usage for a month (<code>month</code> defaults to the current UTC month). <code>by_key</code> maps a key <code>id</code> to its call count, with anonymous calls under <code>"anonymous"</code>.</p>
+<p class="req-label">Response 200 (actual output)</p>
+<pre><code>{
+  "data": {
+    "month": "2026-07",
+    "total": 7,
+    "by_endpoint": { "cities": 3, "charts": 3, "synastry": 1 },
+    "by_key": { "1": 5, "anonymous": 1, "3": 1 }
+  }
+}</code></pre>
+
+<h3>Browser admin page</h3>
+<div class="endpoint-sig"><span class="method get">GET</span><span>/admin</span></div>
+<p>There is also a browser admin page at <a href="/admin"><code>/admin</code></a>: it is a <strong>public shell page</strong> (the page itself loads without authentication) that prompts for the <code>ADMIN_TOKEN</code> client-side and then calls the admin API above with it. The actual operations remain protected by <code>ADMIN_TOKEN</code>.</p>
 
 <h2 id="openapi">OpenAPI Specification</h2>
 <p>The full machine-readable API specification (OpenAPI 3.1, with request/response schemas and examples for every endpoint): <a href="/openapi.json"><code>GET /openapi.json</code></a>. It can be imported directly into Swagger UI, Postman, Insomnia, and similar tools.</p>

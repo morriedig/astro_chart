@@ -631,7 +631,7 @@ RSpec.describe "AstroWeb API" do
       expect(last_response.status).to eq(204)
       expect(last_response.headers["Access-Control-Allow-Origin"]).to eq("*")
       expect(last_response.headers["Access-Control-Allow-Methods"]).to eq("POST,GET,OPTIONS")
-      expect(last_response.headers["Access-Control-Allow-Headers"]).to eq("Content-Type")
+      expect(last_response.headers["Access-Control-Allow-Headers"]).to eq("Content-Type, Authorization, X-API-Key")
     end
   end
 

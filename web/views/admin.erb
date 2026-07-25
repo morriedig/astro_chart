@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AstroChart 管理後台</title>
+  <style>
+    :root {
+      --bg: #0a0c1a; --panel: #141830; --field: #1b2038; --line: #2a3050;
+      --ink: #e8e6f0; --muted: #9aa0c0; --gold: #d3b877; --danger: #d97070;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink);
+      font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
+      padding: 2rem 1.25rem; line-height: 1.5;
+    }
+    .wrap { max-width: 960px; margin: 0 auto; }
+    h1 { font-family: "Songti TC", "Noto Serif TC", Georgia, serif; font-weight: 600; }
+    h2 { font-size: 1.05rem; color: var(--gold); margin: 2rem 0 0.75rem; letter-spacing: 0.04em; }
+    .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1.25rem; margin-bottom: 1rem; }
+    label { display: block; color: var(--muted); font-size: 0.8rem; letter-spacing: 0.06em; margin-bottom: 0.3rem; }
+    input, button { font: inherit; }
+    input[type=text], input[type=number], input[type=password] {
+      width: 100%; background: var(--field); border: 1px solid var(--line);
+      border-radius: 8px; color: var(--ink); padding: 0.5rem 0.65rem;
+    }
+    .row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: end; }
+    .row > div { flex: 1; min-width: 140px; }
+    button {
+      background: var(--gold); border: none; border-radius: 8px; color: #201a08;
+      font-weight: 600; padding: 0.55rem 1.1rem; cursor: pointer;
+    }
+    button.ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+    button.danger { background: transparent; border: 1px solid var(--danger); color: var(--danger); padding: 0.3rem 0.7rem; font-size: 0.85rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-weight: 500; }
+    code { background: var(--field); padding: 0.15rem 0.4rem; border-radius: 5px; font-size: 0.85rem; word-break: break-all; }
+    .token-box { background: var(--field); border: 1px solid var(--gold); border-radius: 8px; padding: 0.75rem; margin-top: 0.75rem; }
+    .muted { color: var(--muted); font-size: 0.85rem; }
+    .err { color: var(--danger); }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AstroChart 管理後台</h1>
+
+  <div class="panel" id="auth-panel">
+    <label for="admin-token">管理權杖（ADMIN_TOKEN）</label>
+    <div class="row">
+      <div><input type="password" id="admin-token" placeholder="貼上 ADMIN_TOKEN" autocomplete="off"></div>
+      <button id="save-token">登入</button>
+    </div>
+    <p class="muted" id="auth-msg">權杖僅存在此瀏覽器分頁（sessionStorage），不會送到別處。</p>
+  </div>
+
+  <div id="app" class="hidden">
+    <h2>建立 API 金鑰</h2>
+    <div class="panel">
+      <div class="row">
+        <div><label for="k-label">標籤</label><input type="text" id="k-label" placeholder="例如 acme-app"></div>
+        <div><label for="k-tier">方案</label><input type="text" id="k-tier" value="free"></div>
+        <div><label for="k-limit">每月上限（留空 = 無限）</label><input type="number" id="k-limit" min="0" placeholder="無限"></div>
+        <button id="create-key">建立</button>
+      </div>
+      <div id="new-token" class="token-box hidden"></div>
+    </div>
+
+    <h2>API 金鑰</h2>
+    <div class="panel"><table id="keys-table"><thead>
+      <tr><th>ID</th><th>前綴</th><th>標籤</th><th>方案</th><th>每月上限</th><th>建立時間</th><th>狀態</th><th></th></tr>
+    </thead><tbody></tbody></table></div>
+
+    <h2>本月用量</h2>
+    <div class="panel" id="usage-box"><p class="muted">載入中…</p></div>
+  </div>
+
+  <p class="err" id="global-err"></p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var TOKEN_KEY = "astro_admin_token";
+  var $ = function (id) { return document.getElementById(id); };
+  var token = sessionStorage.getItem(TOKEN_KEY) || "";
+
+  function api(method, path, body) {
+    return fetch(path, {
+      method: method,
+      headers: {
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json"
+      },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) throw new Error((j.error && j.error.message) || ("HTTP " + r.status));
+        return j.data;
+      });
+    });
+  }
+
+  function showApp() { $("app").classList.remove("hidden"); $("auth-panel").classList.add("hidden"); }
+  function err(msg) { $("global-err").textContent = msg || ""; }
+
+  function loadKeys() {
+    return api("GET", "/admin/api-keys").then(function (keys) {
+      var tb = $("keys-table").querySelector("tbody");
+      tb.textContent = "";
+      keys.forEach(function (k) {
+        var tr = document.createElement("tr");
+        var cells = [k.id, k.prefix + "…", k.label || "—", k.tier,
+          k.monthly_limit == null ? "無限" : k.monthly_limit,
+          (k.created_at || "").replace("T", " ").replace("Z", ""),
+          k.revoked_at ? "已撤銷" : "有效"];
+        cells.forEach(function (c) {
+          var td = document.createElement("td");
+          td.textContent = c;
+          tr.appendChild(td);
+        });
+        var actTd = document.createElement("td");
+        if (!k.revoked_at) {
+          var b = document.createElement("button");
+          b.className = "danger";
+          b.textContent = "撤銷";
+          b.onclick = function () {
+            if (!confirm("撤銷金鑰 #" + k.id + "？")) return;
+            api("DELETE", "/admin/api-keys/" + k.id).then(loadKeys).catch(function (e) { err(e.message); });
+          };
+          actTd.appendChild(b);
+        }
+        tr.appendChild(actTd);
+        tb.appendChild(tr);
+      });
+    });
+  }
+
+  function loadUsage() {
+    return api("GET", "/admin/usage").then(function (u) {
+      var box = $("usage-box");
+      box.textContent = "";
+      var head = document.createElement("p");
+      head.innerHTML = "<strong>" + u.month + "</strong>　總呼叫：<strong>" + u.total + "</strong>";
+      box.appendChild(head);
+      var mk = function (title, obj) {
+        var h = document.createElement("p"); h.className = "muted"; h.textContent = title; box.appendChild(h);
+        var t = document.createElement("table");
+        Object.keys(obj).forEach(function (key) {
+          var tr = document.createElement("tr");
+          var a = document.createElement("td"); a.textContent = key;
+          var b = document.createElement("td"); b.textContent = obj[key];
+          tr.appendChild(a); tr.appendChild(b); t.appendChild(tr);
+        });
+        box.appendChild(t);
+      };
+      mk("依端點", u.by_endpoint);
+      mk("依金鑰", u.by_key);
+    });
+  }
+
+  function refresh() { err(""); Promise.all([loadKeys(), loadUsage()]).catch(function (e) { err(e.message); }); }
+
+  $("save-token").onclick = function () {
+    token = $("admin-token").value.trim();
+    if (!token) return;
+    sessionStorage.setItem(TOKEN_KEY, token);
+    api("GET", "/admin/api-keys").then(function () { showApp(); refresh(); })
+      .catch(function (e) { $("auth-msg").innerHTML = '<span class="err">' + e.message + "</span>"; });
+  };
+
+  $("create-key").onclick = function () {
+    err("");
+    var limit = $("k-limit").value.trim();
+    var body = { label: $("k-label").value.trim(), tier: $("k-tier").value.trim() || "free" };
+    if (limit !== "") body.monthly_limit = parseInt(limit, 10);
+    api("POST", "/admin/api-keys", body).then(function (k) {
+      var box = $("new-token");
+      box.classList.remove("hidden");
+      box.textContent = "";
+      var p = document.createElement("p");
+      p.innerHTML = "金鑰已建立，<strong>只會顯示這一次</strong>，請立即保存：";
+      var c = document.createElement("code");
+      c.textContent = k.token;
+      box.appendChild(p);
+      box.appendChild(c);
+      $("k-label").value = ""; $("k-limit").value = "";
+      refresh();
+    }).catch(function (e) { err(e.message); });
+  };
+
+  if (token) {
+    api("GET", "/admin/api-keys").then(function () { showApp(); refresh(); }).catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>

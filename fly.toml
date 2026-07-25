@@ -4,6 +4,16 @@ primary_region = "nrt"
 [build]
   dockerfile = "Dockerfile"
 
+[env]
+  ASTRO_DB_PATH = "/data/astro.db"
+  API_KEY_MODE = "open"
+
+# Persistent SQLite store (API keys + usage). Single machine + single volume;
+# scale-to-zero keeps data across restarts. ADMIN_TOKEN is a Fly secret.
+[mounts]
+  source = "astro_data"
+  destination = "/data"
+
 [http_service]
   internal_port = 8080
   force_https = true

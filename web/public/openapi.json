@@ -3,16 +3,23 @@
   "info": {
     "title": "AstroChart API",
     "version": "0.3.0",
-    "description": "占星星盤運算 API — 本命盤、合盤（Synastry）、行運（Transits）、二次推運（Secondary Progressions）、太陽回歸（Solar Return）、組合盤（Composite）與城市搜尋。所有請求與回應皆為 JSON，回應帶 Access-Control-Allow-Origin: *。Beta 期間無需 API key。人類可讀文件見 /docs（English: /docs?lang=en）。Response vocabulary defaults to Traditional Chinese (zh-TW); every chart endpoint accepts an optional body field \"lang\" and /api/v1/cities accepts a \"lang\" query parameter (en / ja / ko) — see the Lang schema for the translation semantics.",
+    "description": "占星星盤運算 API — 本命盤、合盤（Synastry）、行運（Transits）、二次推運（Secondary Progressions）、太陽回歸（Solar Return）、組合盤（Composite）與城市搜尋。所有請求與回應皆為 JSON，回應帶 Access-Control-Allow-Origin: *。目前為 open beta（API_KEY_MODE=open）：API 金鑰為選填，帶上時會把用量歸戶到該金鑰並可透過 GET /api/v1/usage 查詢；伺服器日後可切為 required 模式（屆時匿名呼叫回 401 key_required）。金鑰可經 Authorization: Bearer、X-API-Key 標頭或 api_key 查詢參數傳遞。另有營運用管理 API（/admin/*，由 ADMIN_TOKEN 保護）。人類可讀文件見 /docs（English: /docs?lang=en）。Response vocabulary defaults to Traditional Chinese (zh-TW); every chart endpoint accepts an optional body field \"lang\" and /api/v1/cities accepts a \"lang\" query parameter (en / ja / ko) — see the Lang schema for the translation semantics.",
     "license": { "name": "MIT" }
   },
   "servers": [
     { "url": "/", "description": "同源（same-origin）" }
   ],
+  "security": [
+    {},
+    { "bearerAuth": [] },
+    { "apiKeyHeader": [] },
+    { "apiKeyQuery": [] }
+  ],
   "paths": {
     "/api/v1/health": {
       "get": {
         "operationId": "getHealth",
+        "security": [],
         "summary": "健康檢查",
         "description": "確認服務狀態與底層 astro_chart gem 版本。",
         "responses": {
@@ -82,7 +89,9 @@
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" }
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/QuotaExceeded" }
         }
       }
     },
@@ -134,7 +143,9 @@
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" }
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/QuotaExceeded" }
         }
       }
     },
@@ -233,7 +244,9 @@
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" }
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/QuotaExceeded" }
         }
       }
     },
@@ -290,7 +303,9 @@
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" }
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/QuotaExceeded" }
         }
       }
     },
@@ -338,7 +353,9 @@
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" }
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/QuotaExceeded" }
         }
       }
     },
@@ -392,7 +409,9 @@
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" }
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/QuotaExceeded" }
         }
       }
     },
@@ -446,13 +465,65 @@
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" }
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/QuotaExceeded" }
+        }
+      }
+    },
+    "/api/v1/usage": {
+      "get": {
+        "operationId": "getUsage",
+        "summary": "查詢用量（Usage）",
+        "description": "查詢目前 API 金鑰當月的用量摘要。此端點一定需要金鑰（即使伺服器為 open 模式；匿名用量無從歸戶），本身不計費、不翻譯（回應無詞彙欄位）。也接受 ?lang=，但只影響錯誤訊息語言（例如 key_required / invalid_api_key），不影響資料內容。",
+        "security": [
+          { "bearerAuth": [] },
+          { "apiKeyHeader": [] },
+          { "apiKeyQuery": [] }
+        ],
+        "parameters": [
+          {
+            "name": "lang",
+            "in": "query",
+            "required": false,
+            "description": "Only affects the language of error messages; the usage data itself is never translated.",
+            "schema": { "$ref": "#/components/schemas/Lang" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "當月用量摘要",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/UsageSummary" }
+                  }
+                },
+                "example": {
+                  "data": {
+                    "key": { "prefix": "ak_7hgEJAyQ", "label": "Acme Web App", "tier": "free" },
+                    "month": "2026-07",
+                    "total": 5,
+                    "monthly_limit": 1000,
+                    "remaining": 995,
+                    "by_endpoint": { "charts": 2, "cities": 2, "synastry": 1 },
+                    "by_day": { "2026-07-25": 5 }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
         }
       }
     },
     "/openapi.json": {
       "get": {
         "operationId": "getOpenApi",
+        "security": [],
         "summary": "OpenAPI 規格",
         "description": "本文件（OpenAPI 3.1，JSON）。",
         "responses": {
@@ -464,6 +535,182 @@
               }
             }
           }
+        }
+      }
+    },
+    "/admin/api-keys": {
+      "post": {
+        "operationId": "adminCreateKey",
+        "summary": "建立 API 金鑰（營運用）",
+        "description": "簽發一把新的 API 金鑰。回應中的明文 token 只在此回傳一次（伺服器只保存其 SHA-256 雜湊）。營運用端點，需 ADMIN_TOKEN。注意：monthly_limit 若為負數或非整數，回 400 但 error.code 為 missing_param（monthly_limit_integer 只是內部訊息鍵，不會作為 code 回傳）。",
+        "security": [ { "adminAuth": [] } ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": { "type": "string", "default": "", "description": "金鑰標籤（省略時為空字串）", "examples": ["Acme Web App"] },
+                  "tier": { "type": "string", "default": "free", "description": "方案級別標記（省略時為 free）", "examples": ["free", "pro"] },
+                  "monthly_limit": { "type": ["integer", "null"], "minimum": 0, "description": "每月呼叫上限；null 表示無上限。須為非負整數或 null，否則回 400 missing_param。", "examples": [1000, null] }
+                }
+              },
+              "example": { "label": "Acme Web App", "tier": "free", "monthly_limit": 1000 }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "已建立金鑰（明文 token 只回傳這一次）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": { "data": { "$ref": "#/components/schemas/ApiKeyWithToken" } }
+                },
+                "example": {
+                  "data": {
+                    "id": 1,
+                    "token": "ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ",
+                    "prefix": "ak_7hgEJAyQ",
+                    "label": "Acme Web App",
+                    "tier": "free",
+                    "monthly_limit": 1000,
+                    "created_at": "2026-07-25T04:55:45Z"
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/AdminUnauthorized" },
+          "503": { "$ref": "#/components/responses/AdminDisabled" }
+        }
+      },
+      "get": {
+        "operationId": "adminListKeys",
+        "summary": "列出 API 金鑰（營運用）",
+        "description": "依 id 由新到舊列出所有金鑰。永不回傳 token 或其雜湊。需 ADMIN_TOKEN。",
+        "security": [ { "adminAuth": [] } ],
+        "responses": {
+          "200": {
+            "description": "金鑰清單",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "type": "array", "items": { "$ref": "#/components/schemas/ApiKey" } }
+                  }
+                },
+                "example": {
+                  "data": [
+                    { "id": 3, "prefix": "ak_IVRZsXlz", "label": "tiny", "tier": "free", "monthly_limit": 1, "created_at": "2026-07-25T04:55:45Z", "revoked_at": null },
+                    { "id": 1, "prefix": "ak_7hgEJAyQ", "label": "Acme Web App", "tier": "free", "monthly_limit": 1000, "created_at": "2026-07-25T04:55:45Z", "revoked_at": null }
+                  ]
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/AdminUnauthorized" },
+          "503": { "$ref": "#/components/responses/AdminDisabled" }
+        }
+      }
+    },
+    "/admin/api-keys/{id}": {
+      "delete": {
+        "operationId": "adminRevokeKey",
+        "summary": "撤銷 API 金鑰（營運用）",
+        "description": "撤銷指定金鑰；之後以該金鑰呼叫回 401 invalid_api_key。需 ADMIN_TOKEN。找不到該 id（或已撤銷）時回 404 JSON 錯誤物件（code: not_found）。",
+        "security": [ { "adminAuth": [] } ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "金鑰 id",
+            "schema": { "type": "integer" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "已撤銷",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": ["id", "revoked"],
+                      "properties": {
+                        "id": { "type": "integer" },
+                        "revoked": { "type": "boolean", "const": true }
+                      }
+                    }
+                  }
+                },
+                "example": { "data": { "id": 1, "revoked": true } }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/AdminUnauthorized" },
+          "404": {
+            "description": "找不到該 id（或已撤銷）。回傳 JSON 錯誤物件，code 為 not_found。",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": { "code": "not_found", "message": "找不到此 API 路徑" } }
+              }
+            }
+          },
+          "503": { "$ref": "#/components/responses/AdminDisabled" }
+        }
+      }
+    },
+    "/admin/usage": {
+      "get": {
+        "operationId": "adminUsage",
+        "summary": "全站用量（營運用）",
+        "description": "某月（省略 month 時為當月 UTC）的全站用量彙總。by_key 以金鑰 id 為鍵對應呼叫數，匿名呼叫歸在 \"anonymous\"。需 ADMIN_TOKEN。",
+        "security": [ { "adminAuth": [] } ],
+        "parameters": [
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "description": "月份 YYYY-MM（省略時為當月 UTC）",
+            "schema": { "type": "string", "pattern": "^\\d{4}-\\d{2}$" },
+            "examples": { "july": { "value": "2026-07" } }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "全站用量彙總",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": { "data": { "$ref": "#/components/schemas/GlobalUsage" } }
+                },
+                "example": {
+                  "data": {
+                    "month": "2026-07",
+                    "total": 7,
+                    "by_endpoint": { "cities": 3, "charts": 3, "synastry": 1 },
+                    "by_key": { "1": 5, "anonymous": 1, "3": 1 }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/AdminUnauthorized" },
+          "503": { "$ref": "#/components/responses/AdminDisabled" }
         }
       }
     }
@@ -847,6 +1094,84 @@
           "timezone": { "type": "string", "description": "IANA 時區識別碼" }
         }
       },
+      "UsageSummary": {
+        "type": "object",
+        "description": "GET /api/v1/usage 的 data：目前金鑰當月用量摘要（不含詞彙、不翻譯）。",
+        "required": ["key", "month", "total", "monthly_limit", "remaining", "by_endpoint", "by_day"],
+        "properties": {
+          "key": {
+            "type": "object",
+            "description": "目前金鑰的可公開識別資訊（不含完整 token）",
+            "required": ["prefix", "label", "tier"],
+            "properties": {
+              "prefix": { "type": "string", "description": "金鑰前綴（ak_ ＋ 8 碼，共 11 字）", "examples": ["ak_7hgEJAyQ"] },
+              "label": { "type": "string", "examples": ["Acme Web App"] },
+              "tier": { "type": "string", "examples": ["free"] }
+            }
+          },
+          "month": { "type": "string", "pattern": "^\\d{4}-\\d{2}$", "description": "統計月份 YYYY-MM（UTC）", "examples": ["2026-07"] },
+          "total": { "type": "integer", "description": "本月總計費呼叫數" },
+          "monthly_limit": { "type": ["integer", "null"], "description": "每月上限；null 表示無上限" },
+          "remaining": { "type": ["integer", "null"], "description": "本月剩餘可用次數 max(limit − total, 0)；無上限時為 null" },
+          "by_endpoint": {
+            "type": "object",
+            "description": "各端點呼叫數（鍵為去掉 /api/v1/ 前綴的端點名，如 charts），依次數由多到少排序",
+            "additionalProperties": { "type": "integer" }
+          },
+          "by_day": {
+            "type": "object",
+            "description": "本月各日（YYYY-MM-DD）呼叫數，依日期升冪排序",
+            "additionalProperties": { "type": "integer" }
+          }
+        }
+      },
+      "ApiKey": {
+        "type": "object",
+        "description": "API 金鑰的中繼資料（GET /admin/api-keys 回傳；永不含 token 或雜湊）。",
+        "required": ["id", "prefix", "label", "tier", "monthly_limit", "created_at", "revoked_at"],
+        "properties": {
+          "id": { "type": "integer" },
+          "prefix": { "type": "string", "examples": ["ak_7hgEJAyQ"] },
+          "label": { "type": "string", "examples": ["Acme Web App"] },
+          "tier": { "type": "string", "examples": ["free"] },
+          "monthly_limit": { "type": ["integer", "null"], "description": "每月上限；null 表示無上限" },
+          "created_at": { "type": "string", "format": "date-time", "examples": ["2026-07-25T04:55:45Z"] },
+          "revoked_at": { "type": ["string", "null"], "format": "date-time", "description": "撤銷時間（UTC）；null 表示仍有效" }
+        }
+      },
+      "ApiKeyWithToken": {
+        "type": "object",
+        "description": "POST /admin/api-keys 的回傳：新建金鑰＋明文 token。token 只在建立當下回傳這一次（伺服器只存其 SHA-256 雜湊）。",
+        "required": ["id", "token", "prefix", "label", "tier", "monthly_limit", "created_at"],
+        "properties": {
+          "id": { "type": "integer" },
+          "token": { "type": "string", "description": "明文金鑰，只回傳一次", "examples": ["ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ"] },
+          "prefix": { "type": "string", "examples": ["ak_7hgEJAyQ"] },
+          "label": { "type": "string", "examples": ["Acme Web App"] },
+          "tier": { "type": "string", "examples": ["free"] },
+          "monthly_limit": { "type": ["integer", "null"] },
+          "created_at": { "type": "string", "format": "date-time", "examples": ["2026-07-25T04:55:45Z"] }
+        }
+      },
+      "GlobalUsage": {
+        "type": "object",
+        "description": "GET /admin/usage 的 data：某月全站用量彙總。",
+        "required": ["month", "total", "by_endpoint", "by_key"],
+        "properties": {
+          "month": { "type": "string", "pattern": "^\\d{4}-\\d{2}$", "examples": ["2026-07"] },
+          "total": { "type": "integer", "description": "全站本月計費呼叫總數" },
+          "by_endpoint": {
+            "type": "object",
+            "description": "各端點呼叫數，依次數由多到少排序",
+            "additionalProperties": { "type": "integer" }
+          },
+          "by_key": {
+            "type": "object",
+            "description": "各金鑰呼叫數，鍵為金鑰 id（字串）；匿名呼叫歸在 \"anonymous\"。依次數由多到少排序。",
+            "additionalProperties": { "type": "integer" }
+          }
+        }
+      },
       "ErrorResponse": {
         "type": "object",
         "required": ["error"],
@@ -869,8 +1194,14 @@
                   "polar_latitude",
                   "date_out_of_range",
                   "not_found",
-                  "internal_error"
-                ]
+                  "internal_error",
+                  "key_required",
+                  "invalid_api_key",
+                  "quota_exceeded",
+                  "admin_disabled",
+                  "admin_unauthorized"
+                ],
+                "description": "Most codes carry HTTP 400. Exceptions: key_required and invalid_api_key are 401; quota_exceeded is 429; not_found is 404; internal_error is 500; admin_disabled is 503 and admin_unauthorized is 401 (admin API only). NOTE: the invalid-monthly_limit case on POST /admin/api-keys is returned with code \"missing_param\" (message key monthly_limit_integer) — monthly_limit_integer is an internal message key, NOT a distinct error code."
               },
               "message": { "type": "string", "description": "錯誤訊息，預設 zh-TW；依請求的 lang 在地化。Malformed-JSON errors (invalid_json) and invalid_lang itself are always zh-TW because the requested lang cannot be honored. Always key program logic off code — never off the message text." }
             }
@@ -900,6 +1231,85 @@
             }
           }
         }
+      },
+      "Unauthorized": {
+        "description": "驗證失敗（401）。key_required：需要 API 金鑰但未提供（required 模式的計費端點，或任何模式的 /usage）。invalid_api_key：金鑰不存在或已撤銷。訊息預設 zh-TW，依 lang 在地化。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "examples": {
+              "key_required": {
+                "value": { "error": { "code": "key_required", "message": "此端點需要 API 金鑰" } }
+              },
+              "invalid_api_key": {
+                "value": { "error": { "code": "invalid_api_key", "message": "API 金鑰無效或已撤銷" } }
+              }
+            }
+          }
+        }
+      },
+      "QuotaExceeded": {
+        "description": "已超過用量上限（429）。該金鑰本月呼叫數已達其 monthly_limit（僅設有上限的金鑰會觸發）。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "examples": {
+              "quota_exceeded": {
+                "value": { "error": { "code": "quota_exceeded", "message": "已超過本月用量上限（1 次）" } }
+              }
+            }
+          }
+        }
+      },
+      "AdminUnauthorized": {
+        "description": "管理權杖無效（401）。提供的 ADMIN_TOKEN 錯誤。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "examples": {
+              "admin_unauthorized": {
+                "value": { "error": { "code": "admin_unauthorized", "message": "管理權杖無效" } }
+              }
+            }
+          }
+        }
+      },
+      "AdminDisabled": {
+        "description": "管理介面未啟用（503）。伺服器未設定 ADMIN_TOKEN，整個管理 API 停用。",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "examples": {
+              "admin_disabled": {
+                "value": { "error": { "code": "admin_disabled", "message": "管理介面未啟用" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "API 金鑰以 bearer token 傳遞：Authorization: Bearer ak_...。金鑰為 open 模式選填、required 模式必填；/usage 一律必填。"
+      },
+      "apiKeyHeader": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "API 金鑰放在 X-API-Key 標頭。"
+      },
+      "apiKeyQuery": {
+        "type": "apiKey",
+        "in": "query",
+        "name": "api_key",
+        "description": "API 金鑰放在 api_key 查詢參數。優先序低於 Authorization 與 X-API-Key。"
+      },
+      "adminAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "營運機密 ADMIN_TOKEN 以 bearer token 傳遞：Authorization: Bearer <ADMIN_TOKEN>（與 API 金鑰無關）。僅 /admin/* 端點使用。"
       }
     }
   }

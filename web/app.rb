@@ -3,14 +3,22 @@ require "json"
 require "date"
 require "tzinfo"
 require "astro_chart"
+require "rack/utils"
 require_relative "lib/cities"
 require_relative "lib/i18n"
+require_relative "lib/store"
 
 class AstroWeb < Sinatra::Base
   set :public_folder, File.expand_path("public", __dir__)
   set :views, File.expand_path("views", __dir__)
   set :show_exceptions, false
   set :raise_errors, false
+  set :store, Store.new
+
+  # Endpoints that require authentication (open mode: key optional) and
+  # count toward usage. /health and /usage are handled separately.
+  # (Sinatra/Mustermann full-matches, so no \A..\z anchors here.)
+  BILLABLE = %r{/api/v1/(?:charts|synastry|transits|progressions|composite|solar-return|cities)}
 
   DATE_FORMAT = /\A\d{4}-\d{2}-\d{2}\z/
   TIME_FORMAT = /\A(\d{1,2}):(\d{2})\z/
@@ -25,28 +33,61 @@ class AstroWeb < Sinatra::Base
   # #message stays the zh-TW rendering (log/back-compat); the error
   # handler re-renders per request lang.
   class ApiError < StandardError
-    attr_reader :code, :message_key, :args
+    attr_reader :code, :message_key, :args, :status
 
-    def initialize(code, message_key, args = {})
+    # status is positional (not a keyword) so existing call sites that pass
+    # args as trailing key: value pairs keep packing into `args`.
+    def initialize(code, message_key, args = {}, status = 400)
       @code = code
       @message_key = message_key.to_s
       @args = args
+      @status = status
       super(I18n.error_message(@message_key, I18n::DEFAULT_LANG, nil, args))
     end
   end
 
   before %r{/api(?:/.*)?} do
-    headers "Access-Control-Allow-Origin" => "*"
+    headers "Access-Control-Allow-Origin" => "*",
+            "Access-Control-Allow-Headers" => "Content-Type, Authorization, X-API-Key"
   end
 
   options "/api/v1/*" do
     headers "Access-Control-Allow-Methods" => "POST,GET,OPTIONS",
-            "Access-Control-Allow-Headers" => "Content-Type"
+            "Access-Control-Allow-Headers" => "Content-Type, Authorization, X-API-Key"
     204
+  end
+
+  # Authenticate billable endpoints (open mode allows anonymous), then count
+  # each successful call. The resolved key is carried in @api_key.
+  before BILLABLE do
+    authenticate!
+  end
+
+  after BILLABLE do
+    record_usage_for_request if response.status == 200
+  end
+
+  # Admin API is protected by ADMIN_TOKEN. The /admin page itself (exact path,
+  # no trailing segment) is public — it prompts for the token client-side.
+  before %r{/admin/.+} do
+    admin_authenticate!
   end
 
   get "/api/v1/health" do
     json_body("status" => "ok", "gem_version" => AstroChart::VERSION)
+  end
+
+  # A caller inspects their own usage. Requires a key even in open mode
+  # (anonymous usage is not attributable). Not counted, not translated.
+  get "/api/v1/usage" do
+    set_lang!(params["lang"])
+    token = extract_api_token
+    raise ApiError.new("key_required", :key_required, {}, 401) if token.nil?
+
+    key = settings.store.find_key_by_token(token)
+    raise ApiError.new("invalid_api_key", :invalid_api_key, {}, 401) if key.nil?
+
+    json_body("data" => settings.store.usage_summary(key, current_month))
   end
 
   post "/api/v1/charts" do
@@ -157,6 +198,46 @@ class AstroWeb < Sinatra::Base
     send_file path, type: :json
   end
 
+  # ---- Admin (protected by ADMIN_TOKEN) ----
+
+  post "/admin/api-keys" do
+    payload = parse_json_body
+    limit = payload["monthly_limit"]
+    unless limit.nil? || (limit.is_a?(Integer) && limit >= 0)
+      raise ApiError.new("missing_param", :monthly_limit_integer)
+    end
+
+    key = settings.store.create_key(
+      label: payload["label"].to_s,
+      tier: (payload["tier"] || "free").to_s,
+      monthly_limit: limit
+    )
+    status 201
+    json_body("data" => key)
+  end
+
+  get "/admin/api-keys" do
+    json_body("data" => settings.store.list_keys)
+  end
+
+  delete "/admin/api-keys/:id" do
+    # Raise (not halt) so the JSON ApiError handler renders it — a bare halt 404
+    # on this non-/api path would fall through to the site-wide HTML 404.
+    revoked = settings.store.revoke_key(params["id"])
+    raise ApiError.new("not_found", :not_found, {}, 404) unless revoked
+
+    json_body("data" => { "id" => params["id"].to_i, "revoked" => true })
+  end
+
+  get "/admin/usage" do
+    month = params["month"] || current_month
+    json_body("data" => settings.store.global_usage(month))
+  end
+
+  get "/admin" do
+    erb :admin
+  end
+
   get "/" do
     erb :index
   end
@@ -169,7 +250,7 @@ class AstroWeb < Sinatra::Base
     api_error = env["sinatra.error"]
     message = I18n.error_message(api_error.message_key, current_lang,
                                  api_error.message, api_error.args)
-    json_error(400, api_error.code, message)
+    json_error(api_error.status, api_error.code, message)
   end
 
   error do
@@ -186,6 +267,88 @@ class AstroWeb < Sinatra::Base
   end
 
   private
+
+  # ---- Authentication & usage ----
+
+  # Resolve the caller's API key for a billable request. In open mode a
+  # missing key means anonymous (@api_key stays nil); in required mode it is
+  # a 401. A present-but-unknown key is always a 401. Enforces monthly quota.
+  def authenticate!
+    token = extract_api_token
+    if token.nil?
+      raise ApiError.new("key_required", :key_required, {}, 401) if key_mode == "required"
+
+      @api_key = nil
+      return
+    end
+
+    key = settings.store.find_key_by_token(token)
+    raise ApiError.new("invalid_api_key", :invalid_api_key, {}, 401) if key.nil?
+
+    enforce_quota!(key)
+    @api_key = key
+  end
+
+  def enforce_quota!(key)
+    limit = key["monthly_limit"]
+    return if limit.nil?
+
+    used = settings.store.month_count(key["id"], current_month)
+    return if used < limit.to_i
+
+    raise ApiError.new("quota_exceeded", :quota_exceeded, { limit: limit }, 429)
+  end
+
+  # Count a successful billable call against the resolved key (or anonymous).
+  # Metering must never break a good response.
+  def record_usage_for_request
+    key_id = @api_key ? @api_key["id"] : Store::ANONYMOUS_KEY_ID
+    endpoint = request.path_info.sub(%r{\A/api/v1/}, "")
+    settings.store.record_usage(key_id, endpoint, Time.now.utc.strftime("%Y-%m-%d"))
+  rescue StandardError
+    nil
+  end
+
+  def extract_api_token
+    bearer = extract_bearer
+    return bearer if bearer
+
+    header = request.env["HTTP_X_API_KEY"]
+    return header.strip if header && !header.strip.empty?
+
+    query = params["api_key"]
+    return query.strip if query && !query.strip.empty?
+
+    nil
+  end
+
+  def extract_bearer
+    auth = request.env["HTTP_AUTHORIZATION"]
+    return nil unless auth
+
+    match = auth.match(/\ABearer\s+(.+)\z/i)
+    match && match[1].strip
+  end
+
+  def key_mode
+    (ENV["API_KEY_MODE"] || "open").downcase
+  end
+
+  def current_month
+    Time.now.utc.strftime("%Y-%m")
+  end
+
+  # Guard the admin API. Disabled (503) unless ADMIN_TOKEN is set; otherwise a
+  # constant-time comparison against the Bearer token.
+  def admin_authenticate!
+    expected = ENV["ADMIN_TOKEN"].to_s
+    raise ApiError.new("admin_disabled", :admin_disabled, {}, 503) if expected.empty?
+
+    provided = extract_bearer.to_s
+    unless provided.length == expected.length && Rack::Utils.secure_compare(provided, expected)
+      raise ApiError.new("admin_unauthorized", :admin_unauthorized, {}, 401)
+    end
+  end
 
   # Request language, resolved by set_lang!. Defaults to zh-TW — also for
   # errors raised before lang can be read (e.g. malformed JSON).
