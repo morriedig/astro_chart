@@ -1,14 +1,35 @@
 <%
-  tz_zones = %w[
-    Asia/Taipei Asia/Tokyo Asia/Seoul Asia/Shanghai Asia/Hong_Kong Asia/Singapore
-    Asia/Bangkok Asia/Kolkata Asia/Dubai Australia/Sydney Europe/London Europe/Paris
-    Europe/Berlin Europe/Moscow America/New_York America/Chicago America/Los_Angeles
-    America/Sao_Paulo UTC
-  ]
-  tz_options = tz_zones.map { |z|
-    sel = z == "Asia/Taipei" ? " selected" : ""
-    "<option value=\"#{z}\"#{sel}>#{z}</option>"
-  }.join
+  # Full IANA geographic timezone list, generated from TZInfo (same library
+  # the backend validates with, so the two never drift). Grouped by region;
+  # legacy aliases (GB, Egypt, Etc/*, CET, ...) are excluded.
+  tz_geo_regions = %w[Africa America Antarctica Arctic Asia Atlantic Australia Europe Indian Pacific]
+  tz_by_region = TZInfo::Timezone.all_identifiers
+    .select { |z| tz_geo_regions.include?(z.split("/").first) }
+    .sort
+    .group_by { |z| z.split("/").first }
+
+  render_tz_options = lambda do |selected|
+    out = +"<option value=\"UTC\"#{selected == 'UTC' ? ' selected' : ''}>UTC</option>"
+    tz_geo_regions.each do |region|
+      zones = tz_by_region[region]
+      next unless zones
+
+      out << "<optgroup label=\"#{region}\">"
+      zones.each do |z|
+        label = z.split("/", 2)[1].tr("_", " ")
+        sel = z == selected ? " selected" : ""
+        out << "<option value=\"#{z}\"#{sel}>#{label}</option>"
+      end
+      out << "</optgroup>"
+    end
+    out
+  end
+
+  # Default birth-timezone select (Asia/Taipei preselected).
+  tz_options = render_tz_options.call("Asia/Taipei")
+  # Optional relocation select: a blank first option means "use birthplace".
+  tz_options_blank =
+    "<option value=\"\" data-i18n=\"tzUseBirth\">（使用出生地時區）</option>" + render_tz_options.call(nil)
   city_field = lambda do |p|
     <<~HTML
       <div class="field field-city">
@@ -43,10 +64,6 @@
       <div class="field">
         <label for="#{p}-tz" data-i18n="tz">時區</label>
         <select id="#{p}-tz">#{tz_options}</select>
-      </div>
-      <div class="field">
-        <label for="#{p}-tz-custom" data-i18n="tzCustom">自訂時區（IANA 名稱，留空則用上方選項）</label>
-        <input type="text" id="#{p}-tz-custom" placeholder="例如 Asia/Taipei" data-i18n-placeholder="tzPh" autocomplete="off">
       </div>
     HTML
   end
@@ -209,10 +226,6 @@
                 <label for="tr-at-tz" data-i18n="tz">時區</label>
                 <select id="tr-at-tz"><%= tz_options %></select>
               </div>
-              <div class="field">
-                <label for="tr-at-tz-custom" data-i18n="tzCustom">自訂時區（IANA 名稱，留空則用上方選項）</label>
-                <input type="text" id="tr-at-tz-custom" placeholder="例如 Asia/Taipei" data-i18n-placeholder="tzPh" autocomplete="off">
-              </div>
             </div>
           </fieldset>
         </div>
@@ -312,8 +325,8 @@
                 <input type="number" id="srloc-lng" step="0.0001" min="-180" max="180">
               </div>
               <div class="field">
-                <label for="srloc-tz-custom" data-i18n="tzIana">時區（IANA 名稱）</label>
-                <input type="text" id="srloc-tz-custom" placeholder="例如 Asia/Taipei" data-i18n-placeholder="tzPh" autocomplete="off">
+                <label for="srloc-tz" data-i18n="tz">時區</label>
+                <select id="srloc-tz"><%= tz_options_blank %></select>
               </div>
             </div>
           </fieldset>

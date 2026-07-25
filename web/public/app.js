@@ -24,6 +24,7 @@
       tzCustom: "自訂時區（IANA 名稱，留空則用上方選項）",
       tzPh: "例如 Asia/Taipei",
       tzIana: "時區（IANA 名稱）",
+      tzUseBirth: "（使用出生地時區）",
       houseSystem: "宮位制",
       hsPlacidusOpt: "普拉西德制（Placidus）",
       hsWholeOpt: "整宮制（Whole Sign）",
@@ -105,6 +106,7 @@
       tzCustom: "Custom time zone (IANA name, overrides the above)",
       tzPh: "e.g. Asia/Taipei",
       tzIana: "Time zone (IANA name)",
+      tzUseBirth: "(use birthplace time zone)",
       houseSystem: "House system",
       hsPlacidusOpt: "Placidus",
       hsWholeOpt: "Whole Sign",
@@ -186,6 +188,7 @@
       tzCustom: "カスタムタイムゾーン（IANA名、空欄なら上を使用）",
       tzPh: "例：Asia/Taipei",
       tzIana: "タイムゾーン（IANA名）",
+      tzUseBirth: "（出生地のタイムゾーンを使用）",
       houseSystem: "ハウスシステム",
       hsPlacidusOpt: "プラシーダス",
       hsWholeOpt: "ホールサイン",
@@ -267,6 +270,7 @@
       tzCustom: "사용자 지정 시간대 (IANA 이름, 비우면 위 선택 사용)",
       tzPh: "예: Asia/Taipei",
       tzIana: "시간대 (IANA 이름)",
+      tzUseBirth: "(출생지 시간대 사용)",
       houseSystem: "하우스 시스템",
       hsPlacidusOpt: "플라시두스",
       hsWholeOpt: "홀 사인",
@@ -515,7 +519,6 @@
     var time = $(prefix + "-time").value;
     var lat = parseFloat($(prefix + "-lat").value);
     var lng = parseFloat($(prefix + "-lng").value);
-    var custom = $(prefix + "-tz-custom").value.trim();
     if (!date) throw new Error(t("errDate"));
     if (!time) throw new Error(t("errTime"));
     if (!isFinite(lat) || !isFinite(lng)) throw new Error(t("errLatLng"));
@@ -524,7 +527,7 @@
       birth_time: time,
       latitude: lat,
       longitude: lng,
-      timezone: custom || $(prefix + "-tz").value
+      timezone: $(prefix + "-tz").value
     };
   }
 
@@ -992,20 +995,9 @@
       var lngEl = $(prefix + "-lng");
       if (latEl) latEl.value = city.latitude;
       if (lngEl) lngEl.value = city.longitude;
+      // Every IANA zone is now an <option>, so just set the select directly.
       var sel = $(prefix + "-tz");
-      var custom = $(prefix + "-tz-custom");
-      var inSelect = false;
-      if (sel) {
-        for (var i = 0; i < sel.options.length; i++) {
-          if (sel.options[i].value === city.timezone) { inSelect = true; break; }
-        }
-      }
-      if (inSelect) {
-        sel.value = city.timezone;
-        if (custom) custom.value = "";
-      } else if (custom) {
-        custom.value = city.timezone || "";
-      }
+      if (sel && city.timezone) sel.value = city.timezone;
       input.value = city.name;
       close();
     }
@@ -1149,8 +1141,7 @@
       [pfx + "bt", prefix + "-time"],
       [pfx + "lat", prefix + "-lat"],
       [pfx + "lng", prefix + "-lng"],
-      [pfx + "tz", prefix + "-tz"],
-      [pfx + "tzc", prefix + "-tz-custom"]
+      [pfx + "tz", prefix + "-tz"]
     ];
   }
 
@@ -1159,13 +1150,13 @@
     syn: personShareMap("a", "a").concat(personShareMap("b", "b"), [["orb", "syn-orb"]]),
     trans: personShareMap("tr", "").concat([
       ["ad", "tr-at-date"], ["at", "tr-at-time"],
-      ["az", "tr-at-tz"], ["azc", "tr-at-tz-custom"],
+      ["az", "tr-at-tz"],
       ["orb", "trans-orb"]
     ]),
     prog: personShareMap("pg", "").concat([["td", "pg-target"], ["orb", "pg-orb"]]),
     solar: personShareMap("sr", "").concat([
       ["yr", "sr-year"], ["slat", "srloc-lat"],
-      ["slng", "srloc-lng"], ["stz", "srloc-tz-custom"]
+      ["slng", "srloc-lng"], ["stz", "srloc-tz"]
     ]),
     comp: personShareMap("ca", "a").concat(personShareMap("cb", "b"))
   };
@@ -1321,8 +1312,7 @@
       if (!d || !t2) {
         throw new Error(t("errTransAt"));
       }
-      var custom = $("tr-at-tz-custom").value.trim();
-      payload.at = { date: d, time: t2, timezone: custom || $("tr-at-tz").value };
+      payload.at = { date: d, time: t2, timezone: $("tr-at-tz").value };
     }
     var orb = optionalOrb("trans-orb");
     if (orb !== null) payload.orb_limit = orb;
@@ -1353,7 +1343,7 @@
       payload.latitude = lat;
       payload.longitude = lng;
     }
-    var tz = $("srloc-tz-custom").value.trim();
+    var tz = $("srloc-tz").value;
     if (tz !== "") payload.timezone = tz;
     return payload;
   }
