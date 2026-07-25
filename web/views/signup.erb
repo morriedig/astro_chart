@@ -82,15 +82,10 @@
     <p class="err" id="error"></p>
   </div>
 
-  <div class="panel token-box hidden" id="result">
-    <p class="muted" data-i18n="resultIntro">你的 API 金鑰已建立：</p>
-    <code id="token"></code>
-    <button class="copy" id="copy" data-i18n="copy">複製</button>
-    <p class="warn" data-i18n="warn">此金鑰只會顯示這一次，請立即妥善保存 — 離開後將無法再次取得。</p>
-
-    <h2 data-i18n="howTitle">如何使用</h2>
-    <p class="muted" data-i18n="howBody">在 API 請求中以 Authorization 標頭帶上金鑰：</p>
-    <pre><code id="usage-example"></code></pre>
+  <div class="panel hidden" id="result">
+    <p class="warn" style="color:var(--ok)" data-i18n="sentTitle">確認信已寄出！</p>
+    <p class="muted"><span data-i18n="sentBody">我們已寄出一封確認信到</span> <code id="sent-email" style="color:var(--gold);word-break:break-all"></code></p>
+    <p class="muted" data-i18n="sentHint">請點擊信中的連結完成驗證，即可取得你的 API 金鑰。連結 24 小時內有效；沒收到請檢查垃圾郵件匣。</p>
 
     <div class="links">
       <a href="/docs" data-i18n="docsLink">閱讀 API 文件</a>
@@ -116,8 +111,11 @@
       title: "取得 API 金鑰",
       lead: "輸入你的電子郵件，立即免費取得一把 AstroChart 星盤 API 金鑰 — 無需登入。",
       emailLabel: "電子郵件",
-      submit: "取得金鑰",
-      submitting: "建立中…",
+      submit: "寄送確認信",
+      submitting: "寄送中…",
+      sentTitle: "確認信已寄出！",
+      sentBody: "我們已寄出一封確認信到",
+      sentHint: "請點擊信中的連結完成驗證，即可取得你的 API 金鑰。連結 24 小時內有效；沒收到請檢查垃圾郵件匣。",
       resultIntro: "你的 API 金鑰已建立：",
       copy: "複製",
       copied: "已複製",
@@ -133,8 +131,11 @@
       title: "Get an API key",
       lead: "Enter your email to get a free AstroChart astrology API key instantly — no sign-in required.",
       emailLabel: "Email",
-      submit: "Get key",
-      submitting: "Creating…",
+      submit: "Send confirmation",
+      submitting: "Sending…",
+      sentTitle: "Confirmation email sent!",
+      sentBody: "We've sent a confirmation email to",
+      sentHint: "Click the link in it to verify and receive your API key. The link is valid for 24 hours; check your spam folder if it doesn't arrive.",
       resultIntro: "Your API key has been created:",
       copy: "Copy",
       copied: "Copied",
@@ -192,9 +193,7 @@
         $("error").textContent = msg;
         return;
       }
-      var token = res.body.data.token;
-      $("token").textContent = token;
-      $("usage-example").textContent = usageSnippet(token);
+      $("sent-email").textContent = (res.body.data && res.body.data.email) || email;
       $("form-panel").classList.add("hidden");
       $("foot-links").classList.add("hidden");
       $("result").classList.remove("hidden");

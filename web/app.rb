@@ -7,6 +7,8 @@ require "rack/utils"
 require_relative "lib/cities"
 require_relative "lib/i18n"
 require_relative "lib/store"
+require_relative "lib/disposable_domains"
+require_relative "lib/mailer"
 
 class AstroWeb < Sinatra::Base
   set :public_folder, File.expand_path("public", __dir__)
@@ -197,9 +199,9 @@ class AstroWeb < Sinatra::Base
     json_body("data" => I18n.localize_cities(Cities.search(q.strip), current_lang))
   end
 
-  # Self-serve API-key signup. Public, JSON, not billable, no key required.
-  # (Not matched by BILLABLE, so no auth/usage filters run.) Abuse-throttled
-  # per-IP per-day. Returns the plaintext token exactly once.
+  # Self-serve API-key signup — double opt-in. Public, JSON, not billable.
+  # Step 1: stage a pending signup and email a confirmation link. NO key is
+  # issued here. Abuse-throttled per-IP per-day; disposable domains rejected.
   post "/api/v1/signup" do
     payload = parse_json_body
     set_lang!(payload["lang"])
@@ -207,14 +209,36 @@ class AstroWeb < Sinatra::Base
     unless email.length <= EMAIL_MAX_LENGTH && email.match?(EMAIL_FORMAT)
       raise ApiError.new("invalid_email", :invalid_email)
     end
+    raise ApiError.new("disposable_email", :disposable_email) if DisposableDomains.disposable?(email)
 
     ip = client_ip
-    if settings.store.signups_from_ip_today(ip) >= signup_daily_ip_limit
+    if settings.store.pending_signups_from_ip_today(ip) >= signup_daily_ip_limit
       raise ApiError.new("signup_rate_limited", :signup_rate_limited, {}, 429)
     end
 
+    pending = settings.store.create_pending_signup(email: email, ip: ip)
+    link = "#{request.base_url}/verify?token=#{pending['token']}"
+    Mailer.send_verification(email: email, link: link, lang: current_lang)
+
+    status 202
+    json_body("data" => { "status" => "verification_sent", "email" => email })
+  end
+
+  # Step 2 (from the email link): confirm ownership and issue the key. Uses a
+  # deliberate POST (the GET /verify page click) so email link-scanners that
+  # only fetch GET can't consume the one-time token.
+  post "/api/v1/verify" do
+    payload = parse_json_body
+    set_lang!(payload["lang"])
+    result = settings.store.consume_pending_signup(payload["token"])
+    case result["status"]
+    when "expired" then raise ApiError.new("verification_expired", :verification_expired)
+    when "ok"      then nil
+    else raise ApiError.new("verification_invalid", :verification_invalid)
+    end
+
     key = settings.store.create_signup_key(
-      email: email, ip: ip, monthly_limit: signup_monthly_limit
+      email: result["email"], ip: result["ip"], monthly_limit: signup_monthly_limit
     )
     status 201
     json_body("data" => {
@@ -281,6 +305,12 @@ class AstroWeb < Sinatra::Base
   # Public self-serve signup page (standalone HTML, no layout).
   get "/signup" do
     erb :signup, layout: false
+  end
+
+  # Landing for the emailed verification link; the page POSTs the token to
+  # /api/v1/verify on a click and shows the issued key once.
+  get "/verify" do
+    erb :verify, layout: false
   end
 
   # SEO helpers. Public, unauthenticated, not billable (non-/api paths).

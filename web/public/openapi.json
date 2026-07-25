@@ -524,8 +524,8 @@
       "post": {
         "operationId": "signup",
         "security": [],
-        "summary": "自助申請 API 金鑰（Self-serve signup）",
-        "description": "以電子郵件自助申請一把免費 API 金鑰，無需管理權杖。公開端點，不計費、不需金鑰。回應中的明文 token 只在此回傳一次（伺服器只保存其 SHA-256 雜湊，不會於任何公開端點回傳 email）。防濫用：同一來源 IP（取 X-Forwarded-For 的第一段，Fly 會設定）每日申請次數達 SIGNUP_DAILY_IP_LIMIT（預設 5）時回 429 signup_rate_limited。新金鑰 tier 為 free；每月上限預設為無限（除非設定 SIGNUP_MONTHLY_LIMIT）。",
+        "summary": "自助申請 API 金鑰 — 步驟一（Self-serve signup）",
+        "description": "雙重確認（double opt-in）自助申請流程的第一步：以電子郵件申請一把免費 API 金鑰，無需管理權杖。此步驟暫存一筆待確認申請並寄出一封含確認連結的信（連結指向 GET /verify?token=...，有效 24 小時），成功回 202 verification_sent；此步驟不會回傳任何金鑰——金鑰只在步驟二 POST /api/v1/verify 確認後才簽發並回傳一次。公開端點，不計費、不需金鑰。防濫用：同一來源 IP（取 X-Forwarded-For 的第一段，Fly 會設定）每日申請次數達 SIGNUP_DAILY_IP_LIMIT（預設 5）時回 429 signup_rate_limited。拋棄式（暫時）信箱網域回 400 disposable_email。開放測試期確認信經 Resend 寄出；在自訂寄件網域驗證前，使用共用測試寄件者時信件可能只送達營運者本人信箱。",
         "requestBody": {
           "required": true,
           "content": {
@@ -537,7 +537,7 @@
                   "email": {
                     "type": "string",
                     "format": "email",
-                    "description": "開發者的電子郵件。格式無效時回 400 invalid_email。",
+                    "description": "開發者的電子郵件。格式無效或長度 > 254 字回 400 invalid_email；拋棄式信箱網域回 400 disposable_email。",
                     "examples": ["dev@example.com"]
                   },
                   "lang": { "$ref": "#/components/schemas/Lang" }
@@ -548,8 +548,95 @@
           }
         },
         "responses": {
+          "202": {
+            "description": "已受理，確認信已寄出（尚未簽發金鑰）。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": ["status", "email"],
+                      "properties": {
+                        "status": { "type": "string", "const": "verification_sent" },
+                        "email": {
+                          "type": "string",
+                          "format": "email",
+                          "description": "回聲申請時送入的 email",
+                          "examples": ["dev@example.com"]
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "data": {
+                    "status": "verification_sent",
+                    "email": "dev@example.com"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "電子郵件格式無效（invalid_email）或拋棄式信箱（disposable_email）。",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "examples": {
+                  "invalid_email": {
+                    "value": { "error": { "code": "invalid_email", "message": "電子郵件格式無效" } }
+                  },
+                  "disposable_email": {
+                    "value": { "error": { "code": "disposable_email", "message": "拋棄式（暫時）信箱不予受理，請改用常用信箱" } }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "同一 IP 當日申請次數過多（signup_rate_limited）。",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "error": { "code": "signup_rate_limited", "message": "今日申請次數過多，請明日再試" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/verify": {
+      "post": {
+        "operationId": "verify",
+        "security": [],
+        "summary": "自助申請 API 金鑰 — 步驟二（確認並取得金鑰）",
+        "description": "雙重確認自助申請流程的第二步：以確認信連結（GET /verify?token=...）中的一次性 token 確認信箱擁有權，成功時簽發並回傳明文金鑰（只回傳這一次；伺服器只保存其 SHA-256 雜湊）。一般使用者經由 GET /verify?token=... 頁面按下確認鈕、由該頁前端 POST 此端點；也可直接以程式呼叫。公開端點，不計費、不需金鑰。新金鑰 tier 為 free，monthly_limit 預設為 null（無上限，除非設定 SIGNUP_MONTHLY_LIMIT）。token 不存在或已使用回 400 verification_invalid；連結逾 24 小時回 400 verification_expired。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token"],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "description": "確認信連結（/verify?token=...）中的一次性 token。",
+                    "examples": ["3f9c1e7a8b2d4f60a1c3e5d7b9f0a2c4"]
+                  },
+                  "lang": { "$ref": "#/components/schemas/Lang" }
+                }
+              },
+              "example": { "token": "3f9c1e7a8b2d4f60a1c3e5d7b9f0a2c4", "lang": "zh-TW" }
+            }
+          }
+        },
+        "responses": {
           "201": {
-            "description": "已建立金鑰（明文 token 只回傳這一次）",
+            "description": "已確認並建立金鑰（明文 token 只回傳這一次）",
             "content": {
               "application/json": {
                 "schema": {
@@ -587,20 +674,18 @@
             }
           },
           "400": {
-            "description": "電子郵件格式無效（invalid_email）。",
+            "description": "確認 token 無效或已使用（verification_invalid）或連結已過期（verification_expired）。",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-                "example": { "error": { "code": "invalid_email", "message": "電子郵件格式無效" } }
-              }
-            }
-          },
-          "429": {
-            "description": "同一 IP 當日申請次數過多（signup_rate_limited）。",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
-                "example": { "error": { "code": "signup_rate_limited", "message": "今日申請次數過多，請明日再試" } }
+                "examples": {
+                  "verification_invalid": {
+                    "value": { "error": { "code": "verification_invalid", "message": "驗證連結無效或已使用過" } }
+                  },
+                  "verification_expired": {
+                    "value": { "error": { "code": "verification_expired", "message": "驗證連結已過期，請重新申請" } }
+                  }
+                }
               }
             }
           }
@@ -1286,11 +1371,14 @@
                   "invalid_api_key",
                   "quota_exceeded",
                   "invalid_email",
+                  "disposable_email",
                   "signup_rate_limited",
+                  "verification_invalid",
+                  "verification_expired",
                   "admin_disabled",
                   "admin_unauthorized"
                 ],
-                "description": "Most codes carry HTTP 400. Exceptions: key_required and invalid_api_key are 401; quota_exceeded and signup_rate_limited are 429; not_found is 404; internal_error is 500; admin_disabled is 503 and admin_unauthorized is 401 (admin API only). invalid_email is 400 and signup_rate_limited is 429 (POST /api/v1/signup only). NOTE: the invalid-monthly_limit case on POST /admin/api-keys is returned with code \"missing_param\" (message key monthly_limit_integer) — monthly_limit_integer is an internal message key, NOT a distinct error code."
+                "description": "Most codes carry HTTP 400. Exceptions: key_required and invalid_api_key are 401; quota_exceeded and signup_rate_limited are 429; not_found is 404; internal_error is 500; admin_disabled is 503 and admin_unauthorized is 401 (admin API only). Signup step 1 (POST /api/v1/signup): invalid_email and disposable_email are 400, signup_rate_limited is 429. Signup step 2 (POST /api/v1/verify): verification_invalid and verification_expired are both 400. NOTE: the invalid-monthly_limit case on POST /admin/api-keys is returned with code \"missing_param\" (message key monthly_limit_integer) — monthly_limit_integer is an internal message key, NOT a distinct error code."
               },
               "message": { "type": "string", "description": "錯誤訊息，預設 zh-TW；依請求的 lang 在地化。Malformed-JSON errors (invalid_json) and invalid_lang itself are always zh-TW because the requested lang cannot be honored. Always key program logic off code — never off the message text." }
             }
@@ -1316,6 +1404,15 @@
               },
               "date_out_of_range": {
                 "value": { "error": { "code": "date_out_of_range", "message": "日期超出可計算範圍（1885–2099）" } }
+              },
+              "disposable_email": {
+                "value": { "error": { "code": "disposable_email", "message": "拋棄式（暫時）信箱不予受理，請改用常用信箱" } }
+              },
+              "verification_invalid": {
+                "value": { "error": { "code": "verification_invalid", "message": "驗證連結無效或已使用過" } }
+              },
+              "verification_expired": {
+                "value": { "error": { "code": "verification_expired", "message": "驗證連結已過期，請重新申請" } }
               }
             }
           }

@@ -178,6 +178,8 @@
     <li><a href="#overview">Overview</a></li>
     <li><a href="#i18n">Languages (lang)</a></li>
     <li><a href="#auth">Authentication &amp; Usage (API keys)</a></li>
+    <li><a href="#signup">POST /api/v1/signup (request a key)</a></li>
+    <li><a href="#verify">POST /api/v1/verify (confirm &amp; get key)</a></li>
     <li><a href="#health">GET /api/v1/health</a></li>
     <li><a href="#charts">POST /api/v1/charts</a></li>
     <li><a href="#synastry">POST /api/v1/synastry</a></li>
@@ -405,6 +407,96 @@ curl -s "https://your-host/api/v1/cities?q=tai" \
 
 # ?api_key= query parameter (city search)
 curl -s "https://your-host/api/v1/cities?q=tokyo&amp;api_key=ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ"</code></pre>
+
+<h2 id="signup">Self-serve signup (request an API key)</h2>
+<p>Anyone can self-serve a free API key — no admin token required. The flow is <strong>double opt-in</strong> and has two steps:</p>
+<ol>
+  <li><strong>Request</strong>: <code>POST /api/v1/signup</code> with your email. The server stages a pending signup and emails a confirmation link. <strong>No key is returned at this step.</strong></li>
+  <li><strong>Confirm</strong>: click the link in the email (it points to <code>GET /verify?token=…</code>) and press the confirm button; the page then calls <code>POST /api/v1/verify</code> with that token, which is when the plaintext key is issued and <strong>shown exactly once</strong>.</li>
+</ol>
+<p>The whole flow is <strong>public, free, not billable, and requires no key</strong>. Keys themselves are free too; the email step only confirms that you own the address. For how to pass the key and inspect usage once you have it, see <a href="#auth">Authentication &amp; Usage</a>. Two public HTML pages back this flow: <a href="/signup"><code>GET /signup</code></a> (the signup page) and <code>GET /verify</code> (the email-link landing page with the confirm button).</p>
+<div class="note">
+  <strong>Email delivery during open beta:</strong> the confirmation email is currently sent via <a href="https://resend.com">Resend</a>. While a custom sending domain has not yet been verified and the shared test sender is in use, the email <strong>may only be delivered to the operator's own address</strong> until a custom domain is verified. When self-hosting without <code>RESEND_API_KEY</code>, no email is actually sent — the link is written to the server log ("logged mode") instead, so the entire double-opt-in flow still works locally and in tests.
+</div>
+
+<h3 id="signup-step1">Step 1: Request (send the confirmation email)</h3>
+<div class="endpoint-sig"><span class="method post">POST</span><span>/api/v1/signup</span></div>
+<p>Stages a pending signup and emails a confirmation link. Public, not billable, no key needed. Abuse throttle: when the daily request count from one source IP (the first segment of <code>X-Forwarded-For</code>, which Fly sets) reaches <code>SIGNUP_DAILY_IP_LIMIT</code> (default 5), it returns 429 <code>signup_rate_limited</code>.</p>
+
+<h4>Request fields</h4>
+<div class="table-scroll">
+<table>
+  <tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th><th>Example</th></tr>
+  <tr><td><code>email</code></td><td>string</td><td class="pill-yes">yes</td><td>The developer's email. An invalid format or length &gt; 254 chars returns 400 <code>invalid_email</code>; a disposable/throwaway domain (e.g. <code>mailinator.com</code>) returns 400 <code>disposable_email</code></td><td><code>"dev@example.com"</code></td></tr>
+  <tr><td><code>lang</code></td><td>string</td><td class="pill-no">no</td><td>Language of error messages and the confirmation email (see <a href="#i18n">Languages</a>)</td><td><code>"en"</code></td></tr>
+</table>
+</div>
+
+<p class="req-label">Request example</p>
+<pre><code>{
+  "email": "dev@example.com"
+}</code></pre>
+
+<p class="req-label">Response 202 (actual output)</p>
+<pre><code>{
+  "data": {
+    "status": "verification_sent",
+    "email": "dev@example.com"
+  }
+}</code></pre>
+<div class="note">
+  The response is <strong>202 Accepted</strong>, meaning "accepted, confirmation email sent" — <strong>not</strong> that a key was issued. This step returns <strong>no</strong> key. The confirmation link (<code>GET /verify?token=…</code>) is valid for <strong>24 hours</strong>; after that you must sign up again.
+</div>
+
+<h4>Errors</h4>
+<div class="table-scroll">
+<table>
+  <tr><th>HTTP</th><th>code</th><th>Trigger</th><th>Example response</th></tr>
+  <tr><td>400</td><td><code>invalid_email</code></td><td>The email format is invalid, or its length exceeds 254 chars</td><td><code>{"error":{"code":"invalid_email","message":"電子郵件格式無效"}}</code></td></tr>
+  <tr><td>400</td><td><code>disposable_email</code></td><td>The email belongs to a disposable/throwaway domain (e.g. <code>mailinator.com</code>)</td><td><code>{"error":{"code":"disposable_email","message":"拋棄式（暫時）信箱不予受理，請改用常用信箱"}}</code></td></tr>
+  <tr><td>429</td><td><code>signup_rate_limited</code></td><td>The daily request count from this source IP has hit the cap</td><td><code>{"error":{"code":"signup_rate_limited","message":"今日申請次數過多，請明日再試"}}</code></td></tr>
+</table>
+</div>
+
+<h3 id="verify">Step 2: Confirm and receive the key</h3>
+<div class="endpoint-sig"><span class="method post">POST</span><span>/api/v1/verify</span></div>
+<p>Confirms ownership of the address using the <code>token</code> from the confirmation email link, and on success <strong>issues and returns the plaintext key</strong> (returned only this once). Normally an end user reaches this via the <code>GET /verify?token=…</code> page and presses the confirm button, whose front-end <code>POST</code>s here; you can also call it programmatically. Public, not billable, no key needed.</p>
+
+<h4>Request fields</h4>
+<div class="table-scroll">
+<table>
+  <tr><th>Name</th><th>Type</th><th>Required</th><th>Description</th><th>Example</th></tr>
+  <tr><td><code>token</code></td><td>string</td><td class="pill-yes">yes</td><td>The one-time token from the confirmation email link (<code>/verify?token=…</code>)</td><td><code>"3f9c…"</code></td></tr>
+  <tr><td><code>lang</code></td><td>string</td><td class="pill-no">no</td><td>Language of error messages (see <a href="#i18n">Languages</a>)</td><td><code>"en"</code></td></tr>
+</table>
+</div>
+
+<p class="req-label">Request example</p>
+<pre><code>{
+  "token": "3f9c1e7a8b2d4f60a1c3e5d7b9f0a2c4"
+}</code></pre>
+
+<p class="req-label">Response 201 (actual output; the plaintext token is returned only once)</p>
+<pre><code>{
+  "data": {
+    "token": "ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ",
+    "prefix": "ak_7hgEJAyQ",
+    "monthly_limit": null,
+    "tier": "free"
+  }
+}</code></pre>
+<div class="note">
+  <strong>The plaintext <code>token</code> (the API key) is returned only this once</strong> (the server stores only its SHA-256 hash); no endpoint ever returns the full key again — capture it now. New keys have <code>tier</code> <code>free</code> and a <code>monthly_limit</code> of <code>null</code> (unlimited, unless the operator sets <code>SIGNUP_MONTHLY_LIMIT</code>). The one-time token is invalidated as soon as it is used successfully.
+</div>
+
+<h4>Errors</h4>
+<div class="table-scroll">
+<table>
+  <tr><th>HTTP</th><th>code</th><th>Trigger</th><th>Example response</th></tr>
+  <tr><td>400</td><td><code>verification_invalid</code></td><td>The token is unknown or has already been used</td><td><code>{"error":{"code":"verification_invalid","message":"驗證連結無效或已使用過"}}</code></td></tr>
+  <tr><td>400</td><td><code>verification_expired</code></td><td>The link is older than 24 hours</td><td><code>{"error":{"code":"verification_expired","message":"驗證連結已過期，請重新申請"}}</code></td></tr>
+</table>
+</div>
 
 <h2 id="health">Health Check</h2>
 <div class="endpoint-sig"><span class="method get">GET</span><span>/api/v1/health</span></div>
@@ -973,6 +1065,11 @@ curl -s "https://your-host/api/v1/cities?q=tokyo&amp;api_key=ak_7hgEJAyQvsuO4zHn
   <tr><td><strong>401</strong></td><td><code>key_required</code></td><td>An API key is required but was not supplied (a billable endpoint in <code>required</code> mode, or <code>/usage</code> in any mode). See <a href="#auth">Authentication &amp; Usage</a></td><td><code>{"error":{"code":"key_required","message":"此端點需要 API 金鑰"}}</code></td></tr>
   <tr><td><strong>401</strong></td><td><code>invalid_api_key</code></td><td>The supplied key does not exist or has been revoked</td><td><code>{"error":{"code":"invalid_api_key","message":"API 金鑰無效或已撤銷"}}</code></td></tr>
   <tr><td><strong>429</strong></td><td><code>quota_exceeded</code></td><td>The key's usage this month has reached its <code>monthly_limit</code> (message includes the limit)</td><td><code>{"error":{"code":"quota_exceeded","message":"已超過本月用量上限（1 次）"}}</code></td></tr>
+  <tr><td>400</td><td><code>invalid_email</code></td><td><a href="#signup">Self-serve signup</a> email is malformed or longer than 254 chars (<code>POST /api/v1/signup</code>)</td><td><code>{"error":{"code":"invalid_email","message":"電子郵件格式無效"}}</code></td></tr>
+  <tr><td>400</td><td><code>disposable_email</code></td><td>Signup used a disposable/throwaway email domain (<code>POST /api/v1/signup</code>)</td><td><code>{"error":{"code":"disposable_email","message":"拋棄式（暫時）信箱不予受理，請改用常用信箱"}}</code></td></tr>
+  <tr><td><strong>429</strong></td><td><code>signup_rate_limited</code></td><td>Too many self-serve signups from one source IP today (<code>POST /api/v1/signup</code>)</td><td><code>{"error":{"code":"signup_rate_limited","message":"今日申請次數過多，請明日再試"}}</code></td></tr>
+  <tr><td>400</td><td><code>verification_invalid</code></td><td>The confirmation token is unknown or already used (<code>POST /api/v1/verify</code>)</td><td><code>{"error":{"code":"verification_invalid","message":"驗證連結無效或已使用過"}}</code></td></tr>
+  <tr><td>400</td><td><code>verification_expired</code></td><td>The confirmation link is older than 24 hours (<code>POST /api/v1/verify</code>)</td><td><code>{"error":{"code":"verification_expired","message":"驗證連結已過期，請重新申請"}}</code></td></tr>
   <tr><td>404</td><td><code>not_found</code></td><td>Nonexistent <code>/api</code> path</td><td><code>{"error":{"code":"not_found","message":"找不到此 API 路徑"}}</code></td></tr>
   <tr><td>500</td><td><code>internal_error</code></td><td>Unexpected server error (no stack traces leaked)</td><td><code>{"error":{"code":"internal_error","message":"伺服器內部錯誤，請稍後再試"}}</code></td></tr>
 </table>

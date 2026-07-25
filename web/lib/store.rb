@@ -46,6 +46,14 @@ class Store
           count    INTEGER NOT NULL DEFAULT 0,
           PRIMARY KEY (key_id, day, endpoint)
         );
+        CREATE TABLE IF NOT EXISTS pending_signups (
+          token_hash  TEXT NOT NULL PRIMARY KEY,
+          email       TEXT NOT NULL,
+          created_ip  TEXT,
+          created_at  TEXT NOT NULL,
+          expires_at  TEXT NOT NULL,
+          consumed_at TEXT
+        );
       SQL
 
       existing = @db.execute("PRAGMA table_info(api_keys)").map { |c| c["name"] }
@@ -225,11 +233,68 @@ class Store
     }
   end
 
+  # --- Email verification (double opt-in) ---
+
+  # Stage a signup pending email confirmation. Returns the plaintext
+  # verification token (emailed as a link; only its hash is stored) and
+  # the expiry. No API key exists yet — one is issued on consume.
+  def create_pending_signup(email:, ip:, ttl_seconds: 86_400)
+    token = "vs_" + SecureRandom.urlsafe_base64(24)
+    now = Time.now.utc
+    expires_at = (now + ttl_seconds).strftime("%Y-%m-%dT%H:%M:%SZ")
+    @mutex.synchronize do
+      @db.execute(
+        "INSERT INTO pending_signups (token_hash, email, created_ip, created_at, expires_at) " \
+        "VALUES (?, ?, ?, ?, ?)",
+        [hash_token(token), email.to_s, ip.to_s, now.strftime("%Y-%m-%dT%H:%M:%SZ"), expires_at]
+      )
+    end
+    { "token" => token, "expires_at" => expires_at }
+  end
+
+  # Consume a verification token exactly once. Returns:
+  #   {"status" => "ok", "email" =>, "ip" =>}  on success (marks consumed)
+  #   {"status" => "expired"}                   token past its expiry
+  #   {"status" => "invalid"}                   unknown or already consumed
+  def consume_pending_signup(token)
+    return { "status" => "invalid" } if token.nil? || token.empty?
+
+    now = Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    @mutex.synchronize do
+      row = @db.execute(
+        "SELECT email, created_ip, expires_at, consumed_at FROM pending_signups " \
+        "WHERE token_hash = ? LIMIT 1", [hash_token(token)]
+      ).first
+      return { "status" => "invalid" } if row.nil? || row["consumed_at"]
+      return { "status" => "expired" } if row["expires_at"] < now
+
+      @db.execute(
+        "UPDATE pending_signups SET consumed_at = ? WHERE token_hash = ?",
+        [now, hash_token(token)]
+      )
+      { "status" => "ok", "email" => row["email"], "ip" => row["created_ip"] }
+    end
+  end
+
+  # Pending verification requests created today (UTC) from an IP — throttles
+  # signup email sends (abuse / mail-bombing).
+  def pending_signups_from_ip_today(ip)
+    day = Time.now.utc.strftime("%Y-%m-%d")
+    rows = @mutex.synchronize do
+      @db.execute(
+        "SELECT COUNT(*) AS n FROM pending_signups WHERE created_ip = ? AND substr(created_at, 1, 10) = ?",
+        [ip.to_s, day]
+      )
+    end
+    rows.first["n"].to_i
+  end
+
   # Test helper: wipe all rows.
   def reset!
     @mutex.synchronize do
       @db.execute("DELETE FROM api_keys")
       @db.execute("DELETE FROM usage_daily")
+      @db.execute("DELETE FROM pending_signups")
       @db.execute("DELETE FROM sqlite_sequence WHERE name = 'api_keys'")
     end
   end

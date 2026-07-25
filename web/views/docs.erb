@@ -178,6 +178,8 @@
     <li><a href="#overview">總覽</a></li>
     <li><a href="#i18n">多語言（lang）</a></li>
     <li><a href="#auth">驗證與用量（API 金鑰）</a></li>
+    <li><a href="#signup">POST /api/v1/signup（申請金鑰）</a></li>
+    <li><a href="#verify">POST /api/v1/verify（確認取得金鑰）</a></li>
     <li><a href="#health">GET /api/v1/health</a></li>
     <li><a href="#charts">POST /api/v1/charts</a></li>
     <li><a href="#synastry">POST /api/v1/synastry</a></li>
@@ -395,6 +397,96 @@ curl -s "https://your-host/api/v1/cities?q=tai" \
 
 # 查詢參數 ?api_key=（城市搜尋）
 curl -s "https://your-host/api/v1/cities?q=tokyo&amp;api_key=ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ"</code></pre>
+
+<h2 id="signup">自助申請 API 金鑰（Self-serve signup）</h2>
+<p>不需要管理權杖，任何人都能自助申請一把免費 API 金鑰。流程採<strong>雙重確認（double opt-in）</strong>，分兩步：</p>
+<ol>
+  <li><strong>申請</strong>：<code>POST /api/v1/signup</code> 送出你的 email。系統暫存一筆待確認申請並寄出一封含確認連結的信。<strong>此步驟不會回傳金鑰。</strong></li>
+  <li><strong>確認</strong>：點擊信中的連結（指向 <code>GET /verify?token=…</code>），在該頁按下確認鈕，前端即以該 token 呼叫 <code>POST /api/v1/verify</code>，此時才簽發並<strong>只顯示一次</strong>明文金鑰。</li>
+</ol>
+<p>整個流程<strong>公開、免費、不計費、免金鑰</strong>。金鑰本身也是免費的；email 這一步只是為了確認你對該信箱的擁有權。取得金鑰後如何傳遞、如何查詢用量，見<a href="#auth">驗證與用量</a>。另有兩個公開 HTML 頁面：<a href="/signup"><code>GET /signup</code></a>（申請頁）與 <code>GET /verify</code>（信件連結的到達頁，內含確認鈕）。</p>
+<div class="note">
+  <strong>開放測試期的信件寄送：</strong>確認信目前透過 <a href="https://resend.com">Resend</a> 寄出。在尚未驗證自訂寄件網域、仍使用共用測試寄件者的情況下，信件<strong>可能只會送達營運者本人的信箱</strong>，直到綁定並驗證自訂網域為止。自行部署時若未設定 <code>RESEND_API_KEY</code>，信件不會真的寄出，而是把連結寫入伺服器日誌（「logged 模式」），本地與測試環境下整條雙重確認流程仍可運作。
+</div>
+
+<h3 id="signup-step1">步驟一：申請（寄出確認信）</h3>
+<div class="endpoint-sig"><span class="method post">POST</span><span>/api/v1/signup</span></div>
+<p>暫存一筆待確認申請並寄出確認連結。公開端點、不計費、免金鑰。防濫用：同一來源 IP（Fly 會設定的 <code>X-Forwarded-For</code> 第一段）每日申請次數達 <code>SIGNUP_DAILY_IP_LIMIT</code>（預設 5）時回 429 <code>signup_rate_limited</code>。</p>
+
+<h4>請求欄位</h4>
+<div class="table-scroll">
+<table>
+  <tr><th>名稱</th><th>型別</th><th>必填</th><th>說明</th><th>範例</th></tr>
+  <tr><td><code>email</code></td><td>string</td><td class="pill-yes">是</td><td>開發者的電子郵件。格式無效或長度 &gt; 254 字回 400 <code>invalid_email</code>；拋棄式（暫時）信箱網域（如 <code>mailinator.com</code>）回 400 <code>disposable_email</code></td><td><code>"dev@example.com"</code></td></tr>
+  <tr><td><code>lang</code></td><td>string</td><td class="pill-no">否</td><td>錯誤訊息與確認信的語言（見<a href="#i18n">多語言</a>）</td><td><code>"zh-TW"</code></td></tr>
+</table>
+</div>
+
+<p class="req-label">請求範例</p>
+<pre><code>{
+  "email": "dev@example.com"
+}</code></pre>
+
+<p class="req-label">回應 202（實際輸出）</p>
+<pre><code>{
+  "data": {
+    "status": "verification_sent",
+    "email": "dev@example.com"
+  }
+}</code></pre>
+<div class="note">
+  回應為 <strong>202 Accepted</strong>，代表「已受理、確認信已寄出」，而<strong>非</strong>金鑰已簽發——此步驟<strong>不會</strong>回傳任何金鑰。確認連結（<code>GET /verify?token=…</code>）的有效期為 <strong>24 小時</strong>，逾期需重新申請。
+</div>
+
+<h4>錯誤</h4>
+<div class="table-scroll">
+<table>
+  <tr><th>HTTP</th><th>code</th><th>觸發條件</th><th>回應範例</th></tr>
+  <tr><td>400</td><td><code>invalid_email</code></td><td>email 格式無效，或長度超過 254 字</td><td><code>{"error":{"code":"invalid_email","message":"電子郵件格式無效"}}</code></td></tr>
+  <tr><td>400</td><td><code>disposable_email</code></td><td>email 屬於拋棄式（暫時）信箱網域（如 <code>mailinator.com</code>）</td><td><code>{"error":{"code":"disposable_email","message":"拋棄式（暫時）信箱不予受理，請改用常用信箱"}}</code></td></tr>
+  <tr><td>429</td><td><code>signup_rate_limited</code></td><td>同一來源 IP 當日申請次數達上限</td><td><code>{"error":{"code":"signup_rate_limited","message":"今日申請次數過多，請明日再試"}}</code></td></tr>
+</table>
+</div>
+
+<h3 id="verify">步驟二：確認並取得金鑰</h3>
+<div class="endpoint-sig"><span class="method post">POST</span><span>/api/v1/verify</span></div>
+<p>以確認信連結中的 <code>token</code> 確認信箱擁有權，成功時<strong>簽發並回傳明文金鑰</strong>（只回傳這一次）。一般使用者是經由 <code>GET /verify?token=…</code> 頁面按下確認鈕，由該頁前端 <code>POST</code> 此端點；也可直接以程式呼叫。公開端點、不計費、免金鑰。</p>
+
+<h4>請求欄位</h4>
+<div class="table-scroll">
+<table>
+  <tr><th>名稱</th><th>型別</th><th>必填</th><th>說明</th><th>範例</th></tr>
+  <tr><td><code>token</code></td><td>string</td><td class="pill-yes">是</td><td>確認信連結（<code>/verify?token=…</code>）中的一次性 token</td><td><code>"3f9c…"</code></td></tr>
+  <tr><td><code>lang</code></td><td>string</td><td class="pill-no">否</td><td>錯誤訊息語言（見<a href="#i18n">多語言</a>）</td><td><code>"zh-TW"</code></td></tr>
+</table>
+</div>
+
+<p class="req-label">請求範例</p>
+<pre><code>{
+  "token": "3f9c1e7a8b2d4f60a1c3e5d7b9f0a2c4"
+}</code></pre>
+
+<p class="req-label">回應 201（實際輸出，明文 token 只回傳這一次）</p>
+<pre><code>{
+  "data": {
+    "token": "ak_7hgEJAyQvsuO4zHntkpoMvnvrecJ_6QJ",
+    "prefix": "ak_7hgEJAyQ",
+    "monthly_limit": null,
+    "tier": "free"
+  }
+}</code></pre>
+<div class="note">
+  <strong>明文 <code>token</code>（即 API 金鑰）只在此回傳這一次</strong>（伺服器只保存其 SHA-256 雜湊），之後任何端點都不會再吐出完整金鑰——請當場保存。新金鑰 <code>tier</code> 為 <code>free</code>，<code>monthly_limit</code> 預設為 <code>null</code>（無上限，除非營運者設定 <code>SIGNUP_MONTHLY_LIMIT</code>）。一次性 token 一經成功使用即失效。
+</div>
+
+<h4>錯誤</h4>
+<div class="table-scroll">
+<table>
+  <tr><th>HTTP</th><th>code</th><th>觸發條件</th><th>回應範例</th></tr>
+  <tr><td>400</td><td><code>verification_invalid</code></td><td>token 不存在或已使用過</td><td><code>{"error":{"code":"verification_invalid","message":"驗證連結無效或已使用過"}}</code></td></tr>
+  <tr><td>400</td><td><code>verification_expired</code></td><td>連結已逾 24 小時過期</td><td><code>{"error":{"code":"verification_expired","message":"驗證連結已過期，請重新申請"}}</code></td></tr>
+</table>
+</div>
 
 <h2 id="health">健康檢查</h2>
 <div class="endpoint-sig"><span class="method get">GET</span><span>/api/v1/health</span></div>
@@ -959,6 +1051,11 @@ curl -s "https://your-host/api/v1/cities?q=tokyo&amp;api_key=ak_7hgEJAyQvsuO4zHn
   <tr><td><strong>401</strong></td><td><code>key_required</code></td><td>需要 API 金鑰但未提供（<code>required</code> 模式的計費端點，或任何模式的 <code>/usage</code>）。詳見<a href="#auth">驗證與用量</a></td><td><code>{"error":{"code":"key_required","message":"此端點需要 API 金鑰"}}</code></td></tr>
   <tr><td><strong>401</strong></td><td><code>invalid_api_key</code></td><td>提供的金鑰不存在或已被撤銷</td><td><code>{"error":{"code":"invalid_api_key","message":"API 金鑰無效或已撤銷"}}</code></td></tr>
   <tr><td><strong>429</strong></td><td><code>quota_exceeded</code></td><td>該金鑰本月用量已達 <code>monthly_limit</code> 上限（訊息含上限次數）</td><td><code>{"error":{"code":"quota_exceeded","message":"已超過本月用量上限（1 次）"}}</code></td></tr>
+  <tr><td>400</td><td><code>invalid_email</code></td><td><a href="#signup">自助申請</a>的 email 格式無效或長度 &gt; 254 字（<code>POST /api/v1/signup</code>）</td><td><code>{"error":{"code":"invalid_email","message":"電子郵件格式無效"}}</code></td></tr>
+  <tr><td>400</td><td><code>disposable_email</code></td><td>自助申請使用拋棄式（暫時）信箱網域（<code>POST /api/v1/signup</code>）</td><td><code>{"error":{"code":"disposable_email","message":"拋棄式（暫時）信箱不予受理，請改用常用信箱"}}</code></td></tr>
+  <tr><td><strong>429</strong></td><td><code>signup_rate_limited</code></td><td>同一來源 IP 當日自助申請次數達上限（<code>POST /api/v1/signup</code>）</td><td><code>{"error":{"code":"signup_rate_limited","message":"今日申請次數過多，請明日再試"}}</code></td></tr>
+  <tr><td>400</td><td><code>verification_invalid</code></td><td>確認 token 不存在或已使用過（<code>POST /api/v1/verify</code>）</td><td><code>{"error":{"code":"verification_invalid","message":"驗證連結無效或已使用過"}}</code></td></tr>
+  <tr><td>400</td><td><code>verification_expired</code></td><td>確認連結已逾 24 小時過期（<code>POST /api/v1/verify</code>）</td><td><code>{"error":{"code":"verification_expired","message":"驗證連結已過期，請重新申請"}}</code></td></tr>
   <tr><td>404</td><td><code>not_found</code></td><td>不存在的 <code>/api</code> 路徑</td><td><code>{"error":{"code":"not_found","message":"找不到此 API 路徑"}}</code></td></tr>
   <tr><td>500</td><td><code>internal_error</code></td><td>未預期的伺服器錯誤（不洩漏堆疊資訊）</td><td><code>{"error":{"code":"internal_error","message":"伺服器內部錯誤，請稍後再試"}}</code></td></tr>
 </table>
