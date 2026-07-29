@@ -3,45 +3,28 @@
 module AstroChart
   DEFAULT_BACKEND = :pure
 
+  # Backend selection lives on Ephemeris (not the AstroChart top-level
+  # constant) so host apps that reassign or remove the AstroChart constant
+  # (e.g. a Rails app whose ActiveRecord model claims the name after
+  # capturing the gem classes) never break internal dispatch.
+  # AstroChart.backend / backend= below stay as thin delegators for
+  # API compatibility.
   class << self
     # Current ephemeris backend (:pure or :swiss). Defaults to :pure.
     def backend
-      @backend ||= DEFAULT_BACKEND
+      Ephemeris.backend
     end
 
     # Switch the ephemeris backend.
     #
     #   AstroChart.backend = :pure   # pure-Ruby (default, no C extension needed)
     #   AstroChart.backend = :swiss  # Swiss Ephemeris C extension (AGPL)
-    #
-    # Selecting :swiss loads the C extension on demand; a missing/uncompiled
-    # extension raises LoadError with an explicit message instead of failing
-    # silently at call time.
     def backend=(name)
-      case name
-      when :pure
-        @backend = :pure
-      when :swiss
-        load_swiss_extension!
-        @backend = :swiss
-      else
-        raise ArgumentError,
-              "unknown backend #{name.inspect} (expected :pure or :swiss)"
-      end
+      Ephemeris.backend = name
     end
 
     def load_swiss_extension!
-      return if defined?(AstroChart::Ext)
-
-      begin
-        require_relative "astro_chart_ext"
-      rescue LoadError => e
-        raise LoadError,
-              "AstroChart :swiss backend requires the compiled Swiss Ephemeris C extension " \
-              "(astro_chart_ext). Build it with `rake compile` (or `ruby ext/astro_chart/extconf.rb && make`), " \
-              "or use the default pure-Ruby backend (AstroChart.backend = :pure). " \
-              "Original error: #{e.message}"
-      end
+      Ephemeris.load_swiss_extension!
     end
   end
 
@@ -49,6 +32,43 @@ module AstroChart
   # module so the backend (:pure / :swiss) can be swapped without touching
   # the rest of the code.
   module Ephemeris
+    class << self
+      # Current ephemeris backend (:pure or :swiss). Defaults to :pure.
+      def backend
+        @backend ||= DEFAULT_BACKEND
+      end
+
+      # Selecting :swiss loads the C extension on demand; a missing/uncompiled
+      # extension raises LoadError with an explicit message instead of failing
+      # silently at call time.
+      def backend=(name)
+        case name
+        when :pure
+          @backend = :pure
+        when :swiss
+          load_swiss_extension!
+          @backend = :swiss
+        else
+          raise ArgumentError,
+                "unknown backend #{name.inspect} (expected :pure or :swiss)"
+        end
+      end
+
+      def load_swiss_extension!
+        return if defined?(Ext)
+
+        begin
+          require_relative "astro_chart_ext"
+        rescue LoadError => e
+          raise LoadError,
+                "AstroChart :swiss backend requires the compiled Swiss Ephemeris C extension " \
+                "(astro_chart_ext). Build it with `rake compile` (or `ruby ext/astro_chart/extconf.rb && make`), " \
+                "or use the default pure-Ruby backend (AstroChart.backend = :pure). " \
+                "Original error: #{e.message}"
+        end
+      end
+    end
+
     # SE-convention planet ids (numeric literals so the :pure default
     # works without the C extension loaded; values match AstroChart::Ext
     # constants when the extension is present).
@@ -68,7 +88,7 @@ module AstroChart
 
     # Convert date/time to Julian Day number.
     def self.julday(year, month, day, hour)
-      case AstroChart.backend
+      case backend
       when :swiss then Ext.julday(year, month, day, hour)
       else Pure.julday(year, month, day, hour)
       end
@@ -76,7 +96,7 @@ module AstroChart
 
     # Calculate planet apparent ecliptic longitude (degrees 0-360).
     def self.calc_ut(jd, planet_id)
-      case AstroChart.backend
+      case backend
       when :swiss then Ext.calc_ut(jd, planet_id)
       else Pure.calc_ut(jd, planet_id)
       end
@@ -114,7 +134,7 @@ module AstroChart
     # Calculate house cusps + ascendant.
     # Returns { "cusps" => [12 floats], "ascendant" => float, "mc" => float }
     def self.houses(jd, latitude, longitude, system = "P")
-      case AstroChart.backend
+      case backend
       when :swiss then Ext.houses(jd, latitude, longitude, system.ord)
       else Pure.houses(jd, latitude, longitude, system)
       end
