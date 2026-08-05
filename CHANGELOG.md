@@ -25,6 +25,18 @@ All pure Ruby, additive and backward-compatible.
   (`"W"`). Both are pure geometry off the ASC/MC and are defined at every
   latitude |lat| < 90° (including inside the polar circle, where Placidus
   raises). Ord aliases 69/79 mirror the C-extension int argument.
+- **Essential dignities (必然尊貴)**: new `AstroChart::Dignities` — 廟/旺/三分性/
+  界/外觀 with the traditional rulerships and Dorothean triplicities.
+  `.of(planet, longitude, sect:)` reports a planet's dignities/debilities and
+  Lilly-weighted score (+5/+4/+3/+2/+1); `.almuten(longitude, sect:)` returns
+  the winning planet at a degree; plus `.domicile_ruler`/`detriment_ruler`/
+  `exaltation_ruler`/`fall_ruler`/`triplicity_ruler`/`term_ruler`/`face_ruler`.
+  界 uses the verified 埃及界 (Egyptian) table (`scheme: :egyptian`); 托勒密界
+  (Ptolemaic) is intentionally not bundled yet — its table is textually
+  disputed and awaits a verified source.
+- **Annual profection (小限法)**: new `AstroChart::Profection` — `.annual(asc,
+  age)` and `.at(asc, birth_date, target_date)` give the profected house/sign
+  and Lord of the Year (年主星).
 
 ## 0.3.0 (2026-07-24)
 
