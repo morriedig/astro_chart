@@ -5,10 +5,12 @@
 # AstroChart
 
 Pure-Ruby gem for astrology chart calculation: apparent planetary
-longitudes, Placidus & whole-sign houses, retrograde flags, aspects,
-derived points (福點/莉莉絲), aspect patterns, element statistics,
-synastry, transits, secondary progressions, composite charts, and solar
-returns.
+longitudes, four house systems (Placidus, whole-sign, equal, Porphyry),
+retrograde flags, major & minor aspects, derived points (福點/莉莉絲/映點),
+aspect patterns, element statistics, essential dignities & almuten,
+synastry, transits, transit timing, secondary progressions, solar arc
+directions, composite & draconic charts, solar & lunar returns, and annual
+profection.
 
 **No C extension, no external data files, MIT licensed.** Implemented from
 public formulas (Jean Meeus, *Astronomical Algorithms* 2nd ed.; VSOP87D;
@@ -34,8 +36,8 @@ Endpoints: `POST /api/v1/charts` (natal chart), `POST /api/v1/synastry`
 (合盤), `POST /api/v1/transits` (行運), `POST /api/v1/progressions`
 (二次推運), `POST /api/v1/composite` (組合盤), `POST /api/v1/solar-return`
 (太陽回歸), `GET /api/v1/cities` (城市搜尋), `GET /api/v1/health`.
-Source lives in [`web/`](web/) — a Sinatra app deployed on Fly.io (see
-`Dockerfile` / `fly.toml` at the repo root).
+The hosted web app and MCP server live in a separate repository and depend
+on `astro_chart` as a normal gem.
 
 ## Installation
 
@@ -104,7 +106,8 @@ result = chart.generate
     "patterns" => [
       { "pattern_type" => "T三角", "planets" => ["太陽", "月亮", "火星"],
         "apex" => "火星" }
-      # 大三角 (with "element"), T三角 (with "apex"), 大十字
+      # 大三角 (with "element"), T三角/上帝之指/風箏 (with "apex"), 大十字,
+      # 神祕矩形, 星群 (with "zodiac")
     ],
     "element_stats" => {
       "elements"   => { "火" => 1, "土" => 5, "風" => 2, "水" => 2 },
@@ -128,15 +131,25 @@ Every entry carries `"retrograde"` (central-difference daily motion;
 
 ### House Systems
 
-Placidus (`"P"`, default) and Whole Sign (`"W"`), via
-`Chart.new(..., house_system: "W")`. Any other value raises
-`ArgumentError`. Whole-sign cusps sit on sign boundaries starting at the
-ascendant's sign and work at every latitude |lat| < 90° — including polar
-latitudes, where Placidus is undefined.
+Four systems, via `Chart.new(..., house_system: ...)`:
+
+| Code | System | Notes |
+|------|--------|-------|
+| `"P"` | Placidus (default) | time-based; undefined inside the polar circle (raises) |
+| `"W"` | Whole Sign | cusps on sign boundaries from the ascendant's sign |
+| `"E"` | Equal | cusp 1 = ASC, then +30°; the true MC is still reported |
+| `"O"` | Porphyry | quadrant trisection between the four angles |
+
+Any other value raises `ArgumentError`. `W`/`E`/`O` are pure ASC/MC geometry
+and are defined at every latitude |lat| < 90° — including polar latitudes,
+where Placidus is undefined. (`Ephemeris.houses` also accepts the ord aliases
+`80`/`87`/`69`/`79`.)
 
 ### Aspects
 
-合相 (0°, orb 15°), 六分相 (60°, orb 6°), 四分相 (90°, orb 8°), 三分相 (120°, orb 8°), 對分相 (180°, orb 10°)
+Major: 合相 (0°, orb 15°), 六分相 (60°, orb 6°), 四分相 (90°, orb 8°), 三分相 (120°, orb 8°), 對分相 (180°, orb 10°).
+
+Minor (opt-in via `Aspects.calculate(a, b, minor: true)`): 十二分相 (30°), 半四分相 (45°), 補八分相 (135°), 補十二分相/quincunx (150°) — tighter orbs, and they never shadow a major aspect.
 
 ### Synastry (合盤)
 
@@ -198,6 +211,97 @@ result["chart"]            # full chart at that instant (relocate with
                            # latitude:/longitude:/timezone: overrides)
 ```
 
+### Transit Timing (行運精確時點)
+
+The exact UTC instants, within a date range, when a transiting body perfects
+an aspect to a natal point — the "when" that `Transits.against` (a snapshot)
+can't give:
+
+```ruby
+events = AstroChart::TransitTiming.events(natal_chart, "2026-01-01", "2026-12-31")
+events.first
+#=> { "transit_planet" => "土星", "natal_planet" => "太陽",
+#     "aspect_type" => "四分相", "jd" => 2461...,
+#     "time_utc" => "2026-03-14T07:22:10Z", "transit_zodiac" => "牡羊座",
+#     "retrograde" => false }
+```
+
+Found by bracket-and-bisect on the ephemeris, so it is robust through
+retrograde stations — all three passes of an outer-planet contact are caught.
+Options: `minor:` (also time the minor aspects), `step_days:` (sampling
+stride, default 1.0), `bodies:` (restrict transiting bodies, e.g. drop `"月亮"`
+to avoid the Moon's monthly hits). Events are sorted by time.
+
+### Solar Arc Directions (太陽弧推運)
+
+```ruby
+result = AstroChart::SolarArc.directions(natal_chart, "2026-07-24")
+result["arc"]              # degrees the chart is directed (~1° per year of life)
+result["planets"]          # every natal point advanced rigidly by the arc
+result["aspects_to_natal"] # directed→natal aspects, sorted by orb
+```
+
+The arc is the secondary-progressed Sun's travel since birth; unlike secondary
+progressions, the whole chart moves at that single rate.
+
+### Lunar Returns (月亮回歸)
+
+```ruby
+result = AstroChart::LunarReturn.for_date(natal_chart, "2026-07-24")
+result["return_jd"]        # JD (UT) of the lunar return nearest the date
+result["return_time_utc"]  # "2026-07-31T09:54:22Z"
+result["chart"]            # full chart at that instant (relocatable)
+```
+
+The monthly (~27.32-day) analogue of the solar return.
+
+### Draconic Charts (龍盤)
+
+```ruby
+positions = AstroChart::Planets.calculate_positions(jd)  # or any { name => longitude }
+AstroChart::Draconic.positions(positions, north_node)    # shift so 北交點 = 0° 牡羊
+AstroChart::Draconic.chart(positions, north_node)
+#=> { "planets" => [{ "planet" =>, "zodiac" =>, "degree" =>, "total_degree" => }...],
+#     "aspects" => [...] }   # draconic signs + inter-aspects
+```
+
+### Essential Dignities (必然尊貴)
+
+Traditional 廟/旺/三分性/界/外觀 with the traditional rulerships, Dorothean
+triplicities, and both Egyptian and Ptolemaic terms. Pure lookup tables.
+
+```ruby
+D = AstroChart::Dignities
+
+D.of("火星", 5.0)                    # 火星 at 5° 牡羊
+#=> { "planet" => "火星", "dignities" => ["廟", "外觀"],
+#     "debilities" => [], "score" => 6 }
+
+D.almuten(5.0, sect: :day)          #=> { "planet" => "太陽", "score" => 7, "tied" => ["太陽"] }
+
+D.term_ruler(13.0, scheme: :ptolemaic) #=> "金星"   (:egyptian is the default)
+D.domicile_ruler(215)  #=> "火星"    D.triplicity_ruler(5, sect: :night) #=> "木星"
+D.face_ruler(120)      #=> "土星"    D.exaltation_ruler(5)               #=> "太陽"
+```
+
+Dignities score +5/+4/+3/+2/+1 (廟/旺/三分性/界/外觀); debilities 陷 (detriment),
+弱 (fall). Rulers are the seven traditional planets (dignity theory predates
+the outer planets), so these differ from `Zodiac.ruler`'s modern rulerships.
+
+### Annual Profection (小限法)
+
+```ruby
+AstroChart::Profection.annual(ascendant_longitude, 36)
+#=> { "age" => 36, "profected_house" => 1, "profected_sign" => "牡羊座",
+#     "year_lord" => "火星" }
+
+AstroChart::Profection.at(ascendant_longitude, "1990-01-01", "2026-08-05")
+# derives the age from the two dates, then profects
+```
+
+Each completed year advances one whole sign from the ascendant; the
+traditional ruler of the profected sign is the Lord of the Year (年主星).
+
 ### Patterns & Element Stats
 
 Included in `Chart#generate` output, or usable standalone on any
@@ -205,9 +309,13 @@ Included in `Chart#generate` output, or usable standalone on any
 
 ```ruby
 AstroChart::Patterns.detect(positions)
-#=> [{ "pattern_type" => "大三角", "planets" => [...], "element" => "火" },
-#    { "pattern_type" => "T三角",  "planets" => [...], "apex" => "火星" },
-#    { "pattern_type" => "大十字", "planets" => [...] }]
+#=> [{ "pattern_type" => "大三角",   "planets" => [...], "element" => "火" },
+#    { "pattern_type" => "T三角",    "planets" => [...], "apex" => "火星" },
+#    { "pattern_type" => "大十字",   "planets" => [...] },
+#    { "pattern_type" => "上帝之指", "planets" => [...], "apex" => "水星" },  # Yod
+#    { "pattern_type" => "風箏",     "planets" => [...], "apex" => "月亮" },  # Kite
+#    { "pattern_type" => "神祕矩形", "planets" => [...] },                   # Mystic Rectangle
+#    { "pattern_type" => "星群",     "planets" => [...], "zodiac" => "牡羊座" }] # Stellium
 
 AstroChart::Stats.elements(positions)
 #=> { "elements"   => { "火" => 3, "土" => 2, "風" => 3, "水" => 2 },
@@ -223,6 +331,10 @@ AstroChart::Points.day_chart?(sun_longitude, cusps)  #=> true / false / nil
 AstroChart::Points.day_chart_from_horizon?(sun_longitude, ascendant)
 # Chart#generate determines 福點 sect from the horizon (ASC-DSC axis),
 # so the same birth instant yields the same 福點 under "P" and "W".
+
+# 映點 / 反映點 (antiscia / contra-antiscia)
+AstroChart::Points.antiscion(15.0)        #=> 165.0  (across the 巨蟹–摩羯 axis)
+AstroChart::Points.contra_antiscion(15.0) #=> 345.0  (across the 牡羊–天秤 axis)
 ```
 
 ### Individual Modules
@@ -243,6 +355,8 @@ AstroChart::Ephemeris.julday(2000, 1, 1, 12.0)
 AstroChart::Ephemeris.calc_ut(jd, AstroChart::Ephemeris::PLANETS["太陽"])
 AstroChart::Ephemeris.houses(jd, 25.033, 121.565)        # Placidus
 AstroChart::Ephemeris.houses(jd, 25.033, 121.565, "W")   # Whole Sign
+AstroChart::Ephemeris.houses(jd, 25.033, 121.565, "E")   # Equal
+AstroChart::Ephemeris.houses(jd, 25.033, 121.565, "O")   # Porphyry
 
 # Daily motion / retrograde detection
 AstroChart::Ephemeris.speed(jd, 2)        #=> degrees/day (negative = retrograde)
@@ -274,10 +388,12 @@ AstroChart.backend = :swiss # raises LoadError unless the extension is present
 - Transit / progression / solar-return positions verified within 0.003° of
   Swiss Ephemeris at sampled instants (1962–2033).
 - Pluto series is valid 1885–2099 (raises outside this range).
-- **House systems: Placidus (`"P"`) and Whole Sign (`"W"`)** on the pure
-  backend. Other systems raise `ArgumentError`. Polar latitudes
-  (|lat| ≳ 66.5°) raise `AstroChart::Pure::Core::DomainError` on Placidus —
-  it is undefined there; use whole-sign for polar charts.
+- **House systems: Placidus (`"P"`), Whole Sign (`"W"`), Equal (`"E"`) and
+  Porphyry (`"O"`)** on the pure backend. Other systems raise `ArgumentError`.
+  Polar latitudes (|lat| ≳ 66.5°) raise `AstroChart::Pure::Core::DomainError`
+  on Placidus — it is undefined there; use whole-sign, equal or Porphyry for
+  polar charts. Porphyry shares the four angles with Placidus and trisects
+  each quadrant; verified against those invariants.
 
 ## Geocoding
 
