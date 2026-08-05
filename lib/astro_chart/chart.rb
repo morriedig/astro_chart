@@ -1,7 +1,8 @@
 module AstroChart
   class Chart
-    # Supported house systems: "P" (Placidus) / "W" (Whole Sign).
-    HOUSE_SYSTEMS = ["P", "W"].freeze
+    # Supported house systems: "P" (Placidus) / "W" (Whole Sign) /
+    # "E" (Equal, from the ascendant) / "O" (Porphyry).
+    HOUSE_SYSTEMS = ["P", "W", "E", "O"].freeze
 
     # Bodies that can never be retrograde in geocentric longitude.
     NEVER_RETROGRADE = ["太陽", "月亮"].freeze
@@ -13,12 +14,14 @@ module AstroChart
     # birth_time: "HH:MM"
     # latitude / longitude: Float
     # timezone: IANA timezone string (e.g. "Asia/Taipei")
-    # house_system: "P" (Placidus, default) or "W" (Whole Sign)
+    # house_system: "P" (Placidus, default), "W" (Whole Sign),
+    #               "E" (Equal, from the ascendant) or "O" (Porphyry)
     def initialize(birth_date:, birth_time:, latitude:, longitude:, timezone:,
                    house_system: "P")
       unless HOUSE_SYSTEMS.include?(house_system)
         raise ArgumentError,
-              "unknown house system #{house_system.inspect} (expected \"P\" or \"W\")"
+              "unknown house system #{house_system.inspect} " \
+              "(expected \"P\", \"W\", \"E\" or \"O\")"
       end
 
       @birth_date   = birth_date

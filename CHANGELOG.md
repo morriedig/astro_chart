@@ -20,6 +20,11 @@ All pure Ruby, additive and backward-compatible.
 - **Draconic charts (龍盤)**: new `AstroChart::Draconic` — `.positions` shifts
   every longitude so the natal 北交點 sits at 0° 牡羊; `.chart` adds draconic
   signs, in-sign degrees and inter-aspects.
+- **Two more house systems**: Equal (`"E"`, from the ascendant) and Porphyry
+  (`"O"`, quadrant trisection), joining Placidus (`"P"`) and Whole Sign
+  (`"W"`). Both are pure geometry off the ASC/MC and are defined at every
+  latitude |lat| < 90° (including inside the polar circle, where Placidus
+  raises). Ord aliases 69/79 mirror the C-extension int argument.
 
 ## 0.3.0 (2026-07-24)
 

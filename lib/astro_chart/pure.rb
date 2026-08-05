@@ -55,10 +55,13 @@ module AstroChart
       case hsys
       when "P", 80 then Houses.calc(jd_ut, latitude, longitude, "P")
       when "W", 87 then Houses.calc(jd_ut, latitude, longitude, "W")
+      when "E", 69 then Houses.calc(jd_ut, latitude, longitude, "E")
+      when "O", 79 then Houses.calc(jd_ut, latitude, longitude, "O")
       else
         raise ArgumentError,
               "unsupported house system #{hsys.inspect} " \
-              "(pure backend supports Placidus \"P\"/80 and Whole Sign \"W\"/87)"
+              "(pure backend supports Placidus \"P\"/80, Whole Sign \"W\"/87, " \
+              "Equal \"E\"/69 and Porphyry \"O\"/79)"
       end
     end
   end

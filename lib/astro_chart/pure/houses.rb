@@ -51,6 +51,16 @@ module AstroChart
             # 極圈外此修正恆為 no-op；Placidus 路徑不套用（維持原輸出）。
             asc = east_ascendant(asc, mc)
             whole_sign_cusps(asc)
+          when "E"
+            # 等宮制：宮頭 1 = ASC，其後每宮 +30°。與整宮制同樣在 |lat| < 90°
+            # 皆有定義，故一併套用東昇點修正。
+            asc = east_ascendant(asc, mc)
+            equal_cusps(asc)
+          when "O"
+            # Porphyry：四大軸（ASC/IC/DSC/MC）之間的黃道弧各三等分。純幾何，
+            # 不需半弧迭代，於 |lat| < 90° 皆有定義。
+            asc = east_ascendant(asc, mc)
+            porphyry_cusps(asc, mc)
           else
             placidus_cusps(armc, eps, phi, asc, mc)
           end
@@ -95,6 +105,43 @@ module AstroChart
       def whole_sign_cusps(asc)
         base = (asc / 30.0).floor * 30.0
         Array.new(12) { |i| (base + 30.0 * i) % 360.0 }
+      end
+
+      # --- 等宮制 12 宮頭 ---
+      # 宮頭 1 = ASC 本身，其後每宮 +30°（模 360）。MC 仍照常算出並回傳，
+      # 但等宮制的第 10 宮頭為 ASC+270°，不等於 MC（MC 在宮內浮動）。
+      def equal_cusps(asc)
+        Array.new(12) { |i| (asc + 30.0 * i) % 360.0 }
+      end
+
+      # --- Porphyry 12 宮頭 ---
+      # 依黃道經度遞增，四大軸順序為 ASC(1) → IC(4) → DSC(7) → MC(10)。每個
+      # 象限的黃道弧三等分，得中間兩個宮頭：
+      #   1→4：ASC..IC 弧 → 宮頭 2、3      4→7：IC..DSC 弧 → 宮頭 5、6
+      #   7→10：DSC..MC 弧 → 宮頭 8、9     10→1：MC..ASC 弧 → 宮頭 11、12
+      def porphyry_cusps(asc, mc)
+        ic  = Core.norm360(mc + 180.0)   # 第 4 宮 = MC 對沖
+        dsc = Core.norm360(asc + 180.0)  # 第 7 宮 = ASC 對沖
+
+        q1 = (ic  - asc) % 360.0  # ASC → IC
+        q2 = (dsc - ic)  % 360.0  # IC  → DSC
+        q3 = (mc  - dsc) % 360.0  # DSC → MC
+        q4 = (asc - mc)  % 360.0  # MC  → ASC
+
+        cusps = Array.new(12)
+        cusps[0]  = asc
+        cusps[1]  = Core.norm360(asc + q1 / 3.0)
+        cusps[2]  = Core.norm360(asc + 2.0 * q1 / 3.0)
+        cusps[3]  = ic
+        cusps[4]  = Core.norm360(ic + q2 / 3.0)
+        cusps[5]  = Core.norm360(ic + 2.0 * q2 / 3.0)
+        cusps[6]  = dsc
+        cusps[7]  = Core.norm360(dsc + q3 / 3.0)
+        cusps[8]  = Core.norm360(dsc + 2.0 * q3 / 3.0)
+        cusps[9]  = mc
+        cusps[10] = Core.norm360(mc + q4 / 3.0)
+        cusps[11] = Core.norm360(mc + 2.0 * q4 / 3.0)
+        cusps
       end
 
       # --- MC：天頂赤經 → 黃道經度 ---
