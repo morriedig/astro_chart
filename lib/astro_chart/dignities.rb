@@ -19,9 +19,10 @@ module AstroChart
   # Debilities: 陷 detriment (−5, opposite domicile), 弱 fall (−4, opposite
   # exaltation).
   #
-  # Terms: 埃及界 (Egyptian, the default and most widely used) is verified and
-  # supported. Other schemes (e.g. 托勒密界 / Ptolemaic) are not yet bundled —
-  # the Ptolemaic table is textually disputed and awaits a verified source.
+  # Terms: two schemes are bundled — 埃及界 (Egyptian, the default and most
+  # widely used) and 托勒密界 (Ptolemaic). Both are cross-validated against
+  # Astrolog's tables; the Egyptian table additionally matches several
+  # independent references degree-for-degree.
   module Dignities
     PLANETS = ["太陽", "月亮", "水星", "金星", "火星", "木星", "土星"].freeze
 
@@ -68,7 +69,27 @@ module AstroChart
       "雙魚座" => [["金星", 12], ["木星", 16], ["水星", 19], ["火星", 28], ["土星", 30]],
     }.freeze
 
-    TERM_SCHEMES = { egyptian: EGYPTIAN_TERMS }.freeze
+    # 托勒密界 (Ptolemaic terms): Ptolemy's alternative bounds from the
+    # Tetrabiblos. Decoded from Astrolog's rgnTermPtolemy table (the same
+    # decoding reproduces Astrolog's Egyptian table identically to EGYPTIAN_TERMS
+    # above, which validates it). Resolves the classically disputed cells as
+    # 獅子 first term = 土星 and 天蠍 first term = 火星.
+    PTOLEMAIC_TERMS = {
+      "牡羊座" => [["木星", 6], ["金星", 14], ["水星", 21], ["火星", 26], ["土星", 30]],
+      "金牛座" => [["金星", 8], ["水星", 15], ["木星", 22], ["土星", 26], ["火星", 30]],
+      "雙子座" => [["水星", 7], ["木星", 14], ["金星", 21], ["土星", 25], ["火星", 30]],
+      "巨蟹座" => [["火星", 6], ["木星", 13], ["水星", 20], ["金星", 27], ["土星", 30]],
+      "獅子座" => [["土星", 6], ["水星", 13], ["金星", 19], ["木星", 25], ["火星", 30]],
+      "處女座" => [["水星", 7], ["金星", 13], ["木星", 18], ["土星", 24], ["火星", 30]],
+      "天秤座" => [["土星", 6], ["金星", 11], ["木星", 19], ["水星", 24], ["火星", 30]],
+      "天蠍座" => [["火星", 6], ["木星", 14], ["金星", 21], ["水星", 27], ["土星", 30]],
+      "射手座" => [["木星", 8], ["金星", 14], ["水星", 19], ["土星", 25], ["火星", 30]],
+      "摩羯座" => [["金星", 6], ["水星", 12], ["木星", 19], ["火星", 25], ["土星", 30]],
+      "水瓶座" => [["土星", 6], ["水星", 12], ["金星", 20], ["木星", 25], ["火星", 30]],
+      "雙魚座" => [["金星", 8], ["木星", 14], ["水星", 20], ["火星", 26], ["土星", 30]],
+    }.freeze
+
+    TERM_SCHEMES = { egyptian: EGYPTIAN_TERMS, ptolemaic: PTOLEMAIC_TERMS }.freeze
 
     # 外觀 (faces / decans), Chaldean order: the 36 faces cycle the seven
     # planets in Chaldean sequence (土木火日金水月) starting at 火星 for 牡羊 0°.

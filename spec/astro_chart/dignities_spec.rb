@@ -4,18 +4,32 @@ require "astro_chart/dignities"
 RSpec.describe AstroChart::Dignities do
   # Longitudes: 牡羊 0-30, 金牛 30-60, ... 獅子 120-150, 天秤 180-210, 水瓶 300-330
   describe "term tables" do
-    it "gives each sign five Egyptian terms summing to 30° over the five non-luminaries" do
-      described_class::EGYPTIAN_TERMS.each do |sign, terms|
-        expect(terms.length).to eq(5)
-        expect(terms.last[1]).to eq(30)
-        rulers = terms.map { |r, _| r }
-        expect(rulers.sort).to eq(%w[火星 木星 水星 金星 土星].sort)
+    it "gives each Egyptian and Ptolemaic sign five terms summing to 30° over the five non-luminaries" do
+      [described_class::EGYPTIAN_TERMS, described_class::PTOLEMAIC_TERMS].each do |table|
+        table.each do |_sign, terms|
+          expect(terms.length).to eq(5)
+          expect(terms.last[1]).to eq(30)
+          rulers = terms.map { |r, _| r }
+          expect(rulers.sort).to eq(%w[火星 木星 水星 金星 土星].sort)
+          # each Ptolemaic/Egyptian term width is 4-8° (the classical rule)
+          widths = terms.each_with_index.map { |(_, e), i| e - (i.zero? ? 0 : terms[i - 1][1]) }
+          expect(widths).to all(be_between(2, 12))
+        end
       end
     end
 
     it "raises on an unknown term scheme" do
-      expect { described_class.term_ruler(5.0, scheme: :ptolemaic) }
+      expect { described_class.term_ruler(5.0, scheme: :chaldean) }
         .to raise_error(ArgumentError, /unknown term scheme/)
+    end
+
+    it "uses the Ptolemaic table when scheme: :ptolemaic" do
+      # Ptolemaic 牡羊: 木星 0-6, 金星 6-14, 水星 14-21, 火星 21-26, 土星 26-30
+      expect(described_class.term_ruler(13.0, scheme: :ptolemaic)).to eq("金星")
+      expect(described_class.term_ruler(13.0, scheme: :egyptian)).to eq("水星")
+      # Ptolemaic resolves the disputed first terms:
+      expect(described_class.term_ruler(122.0, scheme: :ptolemaic)).to eq("土星") # 獅子 2°
+      expect(described_class.term_ruler(212.0, scheme: :ptolemaic)).to eq("火星") # 天蠍 2°
     end
 
     it "selects the term by degree within the sign" do

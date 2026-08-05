@@ -31,9 +31,9 @@ All pure Ruby, additive and backward-compatible.
   Lilly-weighted score (+5/+4/+3/+2/+1); `.almuten(longitude, sect:)` returns
   the winning planet at a degree; plus `.domicile_ruler`/`detriment_ruler`/
   `exaltation_ruler`/`fall_ruler`/`triplicity_ruler`/`term_ruler`/`face_ruler`.
-  界 uses the verified 埃及界 (Egyptian) table (`scheme: :egyptian`); 托勒密界
-  (Ptolemaic) is intentionally not bundled yet — its table is textually
-  disputed and awaits a verified source.
+  界 ships both 埃及界 (Egyptian, `scheme: :egyptian`, the default) and 托勒密界
+  (Ptolemaic, `scheme: :ptolemaic`); both are cross-validated against Astrolog
+  and the Egyptian table matches several independent references.
 - **Annual profection (小限法)**: new `AstroChart::Profection` — `.annual(asc,
   age)` and `.at(asc, birth_date, target_date)` give the profected house/sign
   and Lord of the Year (年主星).
