@@ -37,6 +37,17 @@ All pure Ruby, additive and backward-compatible.
 - **Annual profection (小限法)**: new `AstroChart::Profection` — `.annual(asc,
   age)` and `.at(asc, birth_date, target_date)` give the profected house/sign
   and Lord of the Year (年主星).
+- **Transit timing (行運精確時點)**: new `AstroChart::TransitTiming.events` —
+  the exact UTC instants in a date range when a transiting body perfects an
+  aspect to a natal point, found by bracket-and-bisect on the ephemeris
+  (robust through retrograde stations, so all three passes of an outer-planet
+  contact are caught). `minor:`, `step_days:` and `bodies:` options.
+- **Solar arc directions (太陽弧推運)**: new `AstroChart::SolarArc.directions`
+  — directs the whole chart rigidly by the secondary-progressed Sun's arc and
+  reports directed-to-natal aspects.
+- **Lunar returns (月亮回歸)**: new `AstroChart::LunarReturn.for_date` — the
+  chart at the Moon's monthly return to its natal longitude, relocatable like
+  the solar return.
 
 ## 0.3.0 (2026-07-24)
 
