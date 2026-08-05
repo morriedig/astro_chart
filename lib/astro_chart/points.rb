@@ -41,6 +41,26 @@ module AstroChart
       ((sun_longitude - ascendant) % 360.0) >= 180.0
     end
 
+    # Antiscion (映點): the reflection of an ecliptic longitude across the
+    # Cancer–Capricorn solstice axis (0° 巨蟹 / 0° 摩羯). Two points are in
+    # antiscia when they are equidistant from that axis and thus receive the
+    # same amount of daylight; classically read as a hidden conjunction.
+    #
+    #   antiscion = (180 − L) mod 360
+    #
+    # e.g. 15° 牡羊 (L=15) → 15° 處女 (165); a point on the axis maps to itself.
+    def self.antiscion(longitude)
+      (180.0 - longitude) % 360.0
+    end
+
+    # Contra-antiscion (反映點): reflection across the Aries–Libra equinox
+    # axis (0° 牡羊 / 0° 天秤) — the antiscion's opposite point.
+    #
+    #   contra_antiscion = (360 − L) mod 360
+    def self.contra_antiscion(longitude)
+      (360.0 - longitude) % 360.0
+    end
+
     # Mean Black Moon Lilith (莉莉絲): ecliptic longitude of the mean lunar
     # apogee, degrees 0-360, for a given Julian Day (UT).
     #

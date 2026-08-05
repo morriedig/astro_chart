@@ -19,6 +19,7 @@ require_relative "astro_chart/transits"
 require_relative "astro_chart/progressions"
 require_relative "astro_chart/composite"
 require_relative "astro_chart/solar_return"
+require_relative "astro_chart/draconic"
 
 module AstroChart
 end

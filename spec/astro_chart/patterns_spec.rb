@@ -205,6 +205,75 @@ RSpec.describe AstroChart::Patterns do
       end
     end
 
+    context "上帝之指 (Yod)" do
+      it "detects a yod: sextile base with a quincunx apex" do
+        # 太陽 0 六分相 金星 60; 火星 210 補十二分相 both (150° from each)
+        positions = { "太陽" => 0, "金星" => 60, "火星" => 210 }
+        results = described_class.detect(positions)
+
+        yods = of_type(results, "上帝之指")
+        expect(yods.length).to eq(1)
+        expect(yods.first["planets"]).to contain_exactly("太陽", "金星", "火星")
+        expect(yods.first["apex"]).to eq("火星")
+      end
+
+      it "does not fire without the quincunxes" do
+        # sextile base only; third body forms no 150° legs
+        positions = { "太陽" => 0, "金星" => 60, "火星" => 120 }
+        expect(of_type(described_class.detect(positions), "上帝之指")).to be_empty
+      end
+    end
+
+    context "風箏 (Kite)" do
+      it "detects a kite over a grand trine and reports both" do
+        # 大三角 太陽0/木星120/火星240; 月亮60 opposes 火星240, sextiles 太陽 & 木星
+        positions = { "太陽" => 0, "木星" => 120, "火星" => 240, "月亮" => 60 }
+        results = described_class.detect(positions)
+
+        expect(of_type(results, "大三角").length).to eq(1)
+        kites = of_type(results, "風箏")
+        expect(kites.length).to eq(1)
+        expect(kites.first["planets"]).to contain_exactly("太陽", "木星", "火星", "月亮")
+        expect(kites.first["apex"]).to eq("月亮")
+      end
+    end
+
+    context "神祕矩形 (Mystic Rectangle)" do
+      it "detects two oppositions joined by sextiles and trines" do
+        # 太陽0 對分 火星180; 金星60 對分 土星240; short sides sextile, long trine
+        positions = { "太陽" => 0, "火星" => 180, "金星" => 60, "土星" => 240 }
+        results = described_class.detect(positions)
+
+        rects = of_type(results, "神祕矩形")
+        expect(rects.length).to eq(1)
+        expect(rects.first["planets"])
+          .to contain_exactly("太陽", "火星", "金星", "土星")
+      end
+
+      it "does not treat a grand cross (square cross-links) as a rectangle" do
+        positions = { "太陽" => 0, "月亮" => 92, "火星" => 183, "金星" => 268 }
+        expect(of_type(described_class.detect(positions), "神祕矩形")).to be_empty
+      end
+    end
+
+    context "星群 (Stellium)" do
+      it "detects 3+ bodies sharing a sign" do
+        # 太陽 5, 水星 12, 金星 25 all in 牡羊座 (0-30)
+        positions = { "太陽" => 5, "水星" => 12, "金星" => 25, "火星" => 200 }
+        results = described_class.detect(positions)
+
+        stelliums = of_type(results, "星群")
+        expect(stelliums.length).to eq(1)
+        expect(stelliums.first["zodiac"]).to eq("牡羊座")
+        expect(stelliums.first["planets"]).to contain_exactly("太陽", "水星", "金星")
+      end
+
+      it "does not fire on only two bodies in a sign" do
+        positions = { "太陽" => 5, "水星" => 12, "火星" => 200 }
+        expect(of_type(described_class.detect(positions), "星群")).to be_empty
+      end
+    end
+
     it "returns an empty array when no pattern is present" do
       # No pair here falls within any major aspect orb.
       positions = { "太陽" => 0, "月亮" => 40, "水星" => 200 }

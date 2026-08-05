@@ -120,7 +120,8 @@ RSpec.describe AstroChart::Chart do
       expect(chart["house_system"]).to eq("P")
       expect(chart["patterns"]).to be_an(Array)
       chart["patterns"].each do |pattern|
-        expect(%w[大三角 T三角 大十字]).to include(pattern["pattern_type"])
+        expect(%w[大三角 T三角 大十字 上帝之指 風箏 神祕矩形 星群])
+          .to include(pattern["pattern_type"])
       end
 
       stats = chart["element_stats"]

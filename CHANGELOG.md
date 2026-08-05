@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+**Minor aspects, four new configurations, antiscia, draconic charts.**
+All pure Ruby, additive and backward-compatible.
+
+- **Minor aspects**: `Aspects.calculate(a, b, minor: true)` also matches
+  十二分相 (30°), 半四分相 (45°), 補八分相 (135°) and 補十二分相 (quincunx,
+  150°). Default stays major-only; minor aspects carry tighter orbs and never
+  shadow a major one.
+- **New aspect patterns** in `Patterns.detect` (and every `Chart#generate`
+  output): 上帝之指 (Yod: sextile base + quincunx apex), 風箏 (Kite: a 大三角
+  plus an opposing/sextiling focal body, reported alongside the trine), 神祕
+  矩形 (Mystic Rectangle: two oppositions joined by sextiles and trines) and
+  星群 (Stellium: 3+ bodies in one sign). Existing 大三角/T三角/大十字 output is
+  unchanged; the node-axis exclusion rules extend to the new configurations.
+- **Antiscia**: `Points.antiscion` (reflection across the 巨蟹–摩羯 solstice
+  axis) and `Points.contra_antiscion` (across the 牡羊–天秤 equinox axis).
+- **Draconic charts (龍盤)**: new `AstroChart::Draconic` — `.positions` shifts
+  every longitude so the natal 北交點 sits at 0° 牡羊; `.chart` adds draconic
+  signs, in-sign degrees and inter-aspects.
+
 ## 0.3.0 (2026-07-24)
 
 **Predictive & comparison modules, whole-sign houses, retrograde flags,

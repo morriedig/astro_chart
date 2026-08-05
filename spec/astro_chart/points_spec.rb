@@ -182,4 +182,35 @@ RSpec.describe AstroChart::Points do
       end
     end
   end
+
+  describe ".antiscion" do
+    it "reflects 15° 牡羊 to 15° 處女" do
+      expect(described_class.antiscion(15.0)).to be_within(1e-9).of(165.0)
+    end
+
+    it "maps a point on the solstice axis to itself" do
+      expect(described_class.antiscion(90.0)).to be_within(1e-9).of(90.0)   # 0° 巨蟹
+      expect(described_class.antiscion(270.0)).to be_within(1e-9).of(270.0) # 0° 摩羯
+    end
+
+    it "is an involution (antiscion of antiscion is the original)" do
+      [0.0, 47.3, 123.9, 200.1, 359.5].each do |lon|
+        expect(described_class.antiscion(described_class.antiscion(lon)))
+          .to be_within(1e-9).of(lon)
+      end
+    end
+  end
+
+  describe ".contra_antiscion" do
+    it "reflects across the equinox axis (360 − L)" do
+      expect(described_class.contra_antiscion(15.0)).to be_within(1e-9).of(345.0)
+    end
+
+    it "is the antiscion's opposite point" do
+      [10.0, 88.0, 199.0].each do |lon|
+        diff = (described_class.contra_antiscion(lon) - described_class.antiscion(lon)).abs
+        expect(diff).to be_within(1e-9).of(180.0)
+      end
+    end
+  end
 end
