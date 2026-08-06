@@ -1,9 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-08-06)
 
-**Minor aspects, four new configurations, antiscia, draconic charts.**
-All pure Ruby, additive and backward-compatible.
+**Traditional dignities, transit timing, two more house systems, minor
+aspects, four new configurations, antiscia, draconic charts, solar arc,
+lunar & annual predictive tools.** All pure Ruby, additive and
+backward-compatible.
 
 - **Minor aspects**: `Aspects.calculate(a, b, minor: true)` also matches
   十二分相 (30°), 半四分相 (45°), 補八分相 (135°) and 補十二分相 (quincunx,
