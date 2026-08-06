@@ -17,7 +17,7 @@ Gem::Specification.new do |spec|
   spec.license       = "MIT"
   spec.required_ruby_version = ">= 3.0"
 
-  spec.files         = Dir["lib/**/*.rb", "LICENSE", "CHANGELOG.md", "astro_chart.gemspec"]
+  spec.files         = Dir["lib/**/*.rb", "README.md", "LICENSE", "CHANGELOG.md", "astro_chart.gemspec"]
   spec.require_paths = ["lib"]
 
   spec.add_dependency "tzinfo", "~> 2.0"
