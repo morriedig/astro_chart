@@ -49,6 +49,23 @@ module AstroChart
       end
     end
 
+    # Apparent geocentric ecliptic [longitude, latitude] in degrees for the Sun,
+    # Moon, VSOP87 planets and Pluto (nodes are not physical bodies).
+    def ecliptic_latlon(jd_ut, planet_id)
+      case planet_id
+      when *VSOP87_PLANET_IDS
+        Vsop87.apparent_ecliptic(planet_id, jd_ut)
+      when MOON_ID
+        Moon.apparent_ecliptic(jd_ut)
+      when PLUTO_ID
+        Pluto.apparent_ecliptic(jd_ut)
+      else
+        raise ArgumentError,
+              "ecliptic_latlon unsupported planet_id #{planet_id.inspect} " \
+              "(supported: Sun 0, planets 2-8, Moon, Pluto)"
+      end
+    end
+
     # House cusps + ascendant + MC. Placidus ("P") and Whole Sign ("W").
     # hsys accepts "P"/"W" or 80/87 (ord values) to mirror the C extension's int argument.
     def houses(jd_ut, latitude, longitude, hsys = "P")

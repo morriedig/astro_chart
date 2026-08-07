@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.1 (2026-08-07)
+
+**Ecliptic latitude → accurate astrocartography.** Additive.
+
+- New `AstroChart::Ephemeris.ecliptic_latlon(jd, id)` — apparent geocentric
+  ecliptic [longitude, latitude] for the Sun, Moon, VSOP87 planets and Pluto
+  (the geocentric vector was already computed; latitude was simply discarded).
+- `Astrocartography.lines` now forms RA/Dec from each body's **true** ecliptic
+  latitude instead of β = 0, so the Moon and Pluto lines (β up to ~5° / ~17°)
+  are placed correctly. The longitude methods delegate to the new latitude-
+  aware ones, so planetary longitudes remain byte-identical (Swiss oracle spec
+  still passes).
+
 ## 0.5.0 (2026-08-07)
 
 **Astrocartography (星象地圖).** All pure Ruby, additive.

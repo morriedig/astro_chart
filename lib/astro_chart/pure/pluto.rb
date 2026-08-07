@@ -94,6 +94,11 @@ module AstroChart
       # 冥王星視黃道經度（度，真春分點 of date）。
       # jd_ut: JD(UT)。超出 Meeus Ch. 37 適用範圍（1885–2099）raise DomainError。
       def apparent_longitude(jd_ut)
+        apparent_ecliptic(jd_ut)[0]
+      end
+
+      # Apparent geocentric ecliptic [longitude, latitude] in degrees. JD(UT).
+      def apparent_ecliptic(jd_ut)
         jd_tt = Core.jd_tt(jd_ut)
         unless jd_tt >= JD_TT_MIN && jd_tt < JD_TT_MAX
           raise Core::DomainError,
@@ -121,9 +126,11 @@ module AstroChart
           tau = new_tau
         end
 
-        lambda_mean = Math.atan2(gy, gx) * RAD2DEG # 平春分點 of date
-        dpsi, = Core.nutation(jd_tt)
-        Core.norm360(lambda_mean + dpsi)
+        dpsi, = Core.nutation(jd_tt) # 平春分點 of date → 真春分點
+        [
+          Core.norm360(Math.atan2(gy, gx) * RAD2DEG + dpsi),
+          Math.asin(gz / Math.sqrt(gx * gx + gy * gy + gz * gz)) * RAD2DEG,
+        ]
       end
 
       # --- 冥王星日心直角座標（AU，黃道座標，旋轉到 jd_frame_tt 的平春分點） ---

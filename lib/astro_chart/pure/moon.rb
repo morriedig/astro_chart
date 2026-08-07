@@ -182,10 +182,16 @@ module AstroChart
       # --- 月球視黃經（度，[0,360)）。引數 **JD(UT)**。 ---
       # 幾何黃經（平春分點 of date）+ 章動 Δψ = 視黃經（真春分點 of date）。
       def apparent_longitude(jd_ut)
+        apparent_ecliptic(jd_ut)[0]
+      end
+
+      # Apparent geocentric ecliptic [longitude, latitude] in degrees. JD(UT).
+      # ELP-2000 gives β directly; nutation shifts longitude only.
+      def apparent_ecliptic(jd_ut)
         tt = Core.jd_tt(jd_ut)
-        lam, _beta, _delta = geometric_position(tt)
+        lam, beta, = geometric_position(tt)
         dpsi_deg, = Core.nutation(tt)
-        Core.norm360(lam + dpsi_deg)
+        [Core.norm360(lam + dpsi_deg), beta]
       end
 
       # --- 真（密切）北交點視黃經（度，[0,360)）。引數 **JD(UT)**。 ---

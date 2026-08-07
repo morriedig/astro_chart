@@ -23,9 +23,9 @@ module AstroChart
   # rising at H = −H0 (eastern), setting at H = +H0 (western), giving
   #   longitude = α + H − GST.
   #
-  # Limitation: the gem exposes ecliptic longitude but not latitude, so β is
-  # approximated as 0. This is exact for the Sun and small for most planets;
-  # the Moon (β up to ~5°) and Pluto (~17°) carry the largest error.
+  # RA/Dec use each body's true apparent ecliptic latitude (via
+  # Ephemeris.ecliptic_latlon), so the lines are accurate for the high-latitude
+  # bodies (Moon, Pluto) too — not just longitude-only approximations.
   module Astrocartography
     Core = Pure::Core
     DEG2RAD = Core::DEG2RAD
@@ -53,10 +53,16 @@ module AstroChart
       eps = Core.true_obliquity(Core.jd_tt(jd_ut)) * DEG2RAD
 
       BODIES.map do |name|
-        lam = Ephemeris.calc_ut(jd_ut, Ephemeris::PLANETS[name]) * DEG2RAD
-        # β = 0 ⇒ RA/Dec from ecliptic longitude and obliquity.
-        ra = Core.norm360(Math.atan2(Math.sin(lam) * Math.cos(eps), Math.cos(lam)) * RAD2DEG)
-        dec = Math.asin(Math.sin(eps) * Math.sin(lam)) # radians
+        lam_deg, beta_deg = Ephemeris.ecliptic_latlon(jd_ut, Ephemeris::PLANETS[name])
+        lam = lam_deg * DEG2RAD
+        beta = beta_deg * DEG2RAD
+        # RA/Dec from apparent ecliptic longitude, latitude and obliquity
+        # (Meeus, Astronomical Algorithms, eqs. 13.3–13.4).
+        ra = Core.norm360(Math.atan2(
+          Math.sin(lam) * Math.cos(eps) - Math.tan(beta) * Math.sin(eps),
+          Math.cos(lam)
+        ) * RAD2DEG)
+        dec = Math.asin(Math.sin(beta) * Math.cos(eps) + Math.cos(beta) * Math.sin(eps) * Math.sin(lam))
 
         {
           "planet" => name,

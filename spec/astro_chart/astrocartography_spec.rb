@@ -10,13 +10,25 @@ RSpec.describe AstroChart::Astrocartography do
 
   def gst_for(jd) = Core.apparent_sidereal_deg(jd)
 
-  # Equatorial coords the module uses (β = 0), for independent checks.
+  # Equatorial coords the module uses (with the body's true ecliptic latitude),
+  # for independent checks.
   def ra_dec(jd, name)
     eps = Core.true_obliquity(Core.jd_tt(jd)) * D2R
-    lam = AstroChart::Ephemeris.calc_ut(jd, AstroChart::Ephemeris::PLANETS[name]) * D2R
-    ra = Core.norm360(Math.atan2(Math.sin(lam) * Math.cos(eps), Math.cos(lam)) * (180.0 / Math::PI))
-    dec = Math.asin(Math.sin(eps) * Math.sin(lam))
+    lam_d, beta_d = AstroChart::Ephemeris.ecliptic_latlon(jd, AstroChart::Ephemeris::PLANETS[name])
+    lam = lam_d * D2R
+    beta = beta_d * D2R
+    ra = Core.norm360(Math.atan2(
+      Math.sin(lam) * Math.cos(eps) - Math.tan(beta) * Math.sin(eps), Math.cos(lam)
+    ) * (180.0 / Math::PI))
+    dec = Math.asin(Math.sin(beta) * Math.cos(eps) + Math.cos(beta) * Math.sin(eps) * Math.sin(lam))
     [ra, dec]
+  end
+
+  it "uses the body's real ecliptic latitude (Moon and Pluto are non-zero)" do
+    _, moon_beta = AstroChart::Ephemeris.ecliptic_latlon(jd, AstroChart::Ephemeris::PLANETS["月亮"])
+    _, pluto_beta = AstroChart::Ephemeris.ecliptic_latlon(jd, AstroChart::Ephemeris::PLANETS["冥王星"])
+    expect(moon_beta.abs).to be > 0.5
+    expect(pluto_beta.abs).to be > 0.5
   end
 
   # Apparent altitude (degrees) of a body at geographic (lat, lon).

@@ -61,6 +61,20 @@ module AstroChart
         end
       end
 
+      # Apparent geocentric ecliptic [longitude, latitude] in degrees. The Sun's
+      # geocentric ecliptic latitude is ~0 (well under 1″), returned as 0.0.
+      def apparent_ecliptic(planet_id, jd_ut)
+        tt = Core.jd_tt(jd_ut)
+        if planet_id == SUN_ID
+          [sun_apparent_longitude(tt), 0.0]
+        elsif PLANET_KEYS.key?(planet_id)
+          planet_apparent_ecliptic(PLANET_KEYS.fetch(planet_id), tt)
+        else
+          raise Core::DomainError,
+                "Vsop87 不支援 planet_id=#{planet_id}（僅太陽 0 與行星 2..8）"
+        end
+      end
+
       # --- 太陽（Meeus Ch. 25 高精度法） ---
       def sun_apparent_longitude(jd_tt)
         l, _b, r = heliocentric_fk5(:earth, jd_tt)
@@ -75,8 +89,14 @@ module AstroChart
       # 重算——兩者同取 t-τ 等效把光行時與（地球速度造成的）光行差
       # 一併涵蓋（planetary aberration；Meeus Ch. 33 註）。τ 迭代兩輪。
       def planet_apparent_longitude(planet_key, jd_tt)
+        planet_apparent_ecliptic(planet_key, jd_tt)[0]
+      end
+
+      # Geocentric apparent ecliptic [longitude, latitude] (degrees) for a VSOP87
+      # planet, via the light-time-corrected geocentric rectangular vector.
+      def planet_apparent_ecliptic(planet_key, jd_tt)
         tau = 0.0
-        x = y = 0.0
+        x = y = z = 0.0
         2.times do
           ex, ey, ez = heliocentric_rect(:earth, jd_tt - tau)
           px, py, pz = heliocentric_rect(planet_key, jd_tt - tau)
@@ -86,9 +106,11 @@ module AstroChart
           delta = Math.sqrt(x * x + y * y + z * z)
           tau = LIGHT_TIME_DAYS_PER_AU * delta
         end
-        lambda_deg = Math.atan2(y, x) * RAD2DEG
         dpsi_deg, = Core.nutation(jd_tt)
-        Core.norm360(lambda_deg + dpsi_deg)
+        [
+          Core.norm360(Math.atan2(y, x) * RAD2DEG + dpsi_deg),
+          Math.asin(z / Math.sqrt(x * x + y * y + z * z)) * RAD2DEG,
+        ]
       end
 
       # --- 日心黃道直角座標（FK5 修正後；黃道與分點皆為 of date） ---

@@ -102,6 +102,12 @@ module AstroChart
       end
     end
 
+    # Apparent geocentric ecliptic [longitude, latitude] in degrees. Pure
+    # backend only (the Swiss extension exposes latitude via its own API).
+    def self.ecliptic_latlon(jd, planet_id)
+      Pure.ecliptic_latlon(jd, planet_id)
+    end
+
     # Apparent daily motion in ecliptic longitude (degrees/day), via central
     # difference of calc_ut at jd ± 0.5 day. The difference is folded into
     # (-180, 180] so the 0°/360° wraparound never produces a spurious value.
