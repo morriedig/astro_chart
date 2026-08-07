@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 (2026-08-07)
+
+**Astrocartography (星象地圖).** All pure Ruby, additive.
+
+- New `AstroChart::Astrocartography.lines(jd)` — the relocational map lines for
+  the ten bodies at a birth instant: the MC and IC meridian longitudes, and
+  the ASC (rising) and DSC (setting) horizon curves as latitude/longitude
+  segments (broken where a body is circumpolar). Built from the body's RA/Dec
+  and Greenwich apparent sidereal time; verified independently (body altitude
+  ≈ 0 along every ASC/DSC point, LST = RA on the MC). Ecliptic latitude is
+  approximated as 0 (exact for the Sun; largest error for the Moon/Pluto).
+
 ## 0.4.0 (2026-08-06)
 
 **Traditional dignities, transit timing, two more house systems, minor
