@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0 (2026-08-07)
+
+**Fixed stars (恆星).** All pure Ruby, additive.
+
+- New `AstroChart::FixedStars` with a 57-star catalogue (J2000/ICRS, transcribed
+  verbatim from Swiss Ephemeris `sefstars.txt`; traditional nature/keyword from
+  Robson 1923). `FixedStars.ecliptic_longitude(star, jd)` precesses each star
+  from J2000 to the birth date (proper motion + rigorous Meeus ζ/z/θ + ecliptic
+  of date); `FixedStars.positions(jd)`; and `FixedStars.conjunctions(positions,
+  jd, orb: 1.0)` returns which chart bodies conjunct which stars. Verified
+  against published modern longitudes (Regulus ~0° Virgo, Spica ~24° Libra,
+  Antares ~10° Sagittarius, Aldebaran ~10° Gemini, Algol ~26° Taurus).
+
 ## 0.5.1 (2026-08-07)
 
 **Ecliptic latitude → accurate astrocartography.** Additive.
