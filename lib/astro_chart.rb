@@ -27,6 +27,7 @@ require_relative "astro_chart/profection"
 require_relative "astro_chart/transit_timing"
 require_relative "astro_chart/solar_arc"
 require_relative "astro_chart/lunar_return"
+require_relative "astro_chart/horary"
 
 module AstroChart
 end

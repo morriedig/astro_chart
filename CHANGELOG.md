@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.7.0 (2026-08-08)
+
+**Horary / traditional condition (卜卦占星).** All pure Ruby, additive.
+
+- New `AstroChart::Horary` — the sky judged at the moment a question is asked,
+  following William Lilly's *Christian Astrology* (with Frawley/Bonatti variants
+  as keyword options). Everything is signed-speed based, so retrograde is
+  handled throughout.
+  - `Horary.aspects(jd)` — every in-orb aspect between the bodies with **applying
+    vs separating** motion, the applier, **time to perfection** (nearest future
+    crossing by grid-bracket + bisection, robust through retrograde stations),
+    and partile / out-of-sign flags. Lilly moiety orbs.
+  - `Horary.solar_phases(jd)` — **cazimi** (≤0°17'), **combust** (≤8°30'),
+    **under the beams** (≤17°) for the five planets and the Moon, cazimi
+    overriding combust, plus whether the body is applying to the Sun.
+  - `Horary.moon_condition(jd)` — **void of course** (Lilly: perfects no aspect
+    before leaving its sign), **via combusta** (15° Libra–15° Scorpio), speed
+    (fast/slow vs the mean 13°10'), and the Moon's next aspect.
+  - `Horary.perfection(jd, querent, quesited)` — **translation / collection /
+    prohibition / frustration / refranation** between two significators, with a
+    time-ordered verdict (the earliest-acting mechanism wins).
+  - `Horary.considerations(jd, ascendant:, cusps:)` — the classical
+    considerations before judgment (radicality) flags.
+  - `Horary.snapshot(jd)` bundles positions, aspects, solar phases, Moon and
+    considerations.
+
 ## 0.6.0 (2026-08-07)
 
 **Fixed stars (恆星).** All pure Ruby, additive.
