@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.8.0 (2026-08-21)
+
+**Planetary hours (行星時) and the day ruler (日主星).** All pure Ruby, additive.
+
+- New `AstroChart::PlanetaryHours`. The astrological day runs sunrise→sunrise,
+  with daytime and night each split into twelve unequal hours; the first hour is
+  the day ruler (ruler of the weekday) and the rulers step through the Chaldean
+  order. `PlanetaryHours.at(jd, latitude:, longitude:)` gives the hour in force
+  (ruler, 1–24 number, day/night, start/end); `.table(...)` lists all 24;
+  `.day_ruler(...)` the weekday ruler. Sunrise/sunset are found by root-finding
+  the Sun's altitude to −0°50' (refraction + semidiameter) from the pure
+  ephemeris — verified against the almanac (Greenwich 2024-01-01 sunrise 08:06,
+  sunset 16:01 UT, to the minute). Circumpolar days raise `DomainError`.
+
 ## 0.7.0 (2026-08-08)
 
 **Horary / traditional condition (卜卦占星).** All pure Ruby, additive.
