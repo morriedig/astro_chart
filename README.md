@@ -21,12 +21,12 @@ ELP-2000/82B), verified against Swiss Ephemeris to < 0.014° (most bodies
 
 A live web UI and open JSON API built on this gem:
 
-- **Web 星盤查詢**: https://astro-chart-api.fly.dev/ （本命盤、合盤、行運、二次推運、組合盤、太陽回歸，繁體中文）
-- **API 文件**: https://astro-chart-api.fly.dev/docs
+- **Web 星盤查詢**: https://astro-chart.moritarot.com/ （本命盤、合盤、行運、二次推運、組合盤、太陽回歸，繁體中文）
+- **API 文件**: https://astro-chart.moritarot.com/docs
 - Currently in open beta: no API key, no rate limit, free. CORS enabled.
 
 ```bash
-curl -X POST https://astro-chart-api.fly.dev/api/v1/charts \
+curl -X POST https://astro-chart.moritarot.com/api/v1/charts \
   -H "Content-Type: application/json" \
   -d '{"birth_date":"1990-01-01","birth_time":"12:00",
        "latitude":25.033,"longitude":121.5654,"timezone":"Asia/Taipei"}'

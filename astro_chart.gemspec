@@ -13,9 +13,16 @@ Gem::Specification.new do |spec|
                        "secondary progressions, composite charts and solar returns. " \
                        "No C extension, no external data files. Implemented from public formulas " \
                        "(Meeus, Astronomical Algorithms 2nd ed.)."
-  spec.homepage      = "https://github.com/morriedig/astro_chart"
+  spec.homepage      = "https://astro-chart.moritarot.com"
   spec.license       = "MIT"
   spec.required_ruby_version = ">= 3.0"
+
+  spec.metadata = {
+    "homepage_uri"      => "https://astro-chart.moritarot.com",
+    "source_code_uri"   => "https://github.com/morriedig/astro_chart",
+    "changelog_uri"     => "https://github.com/morriedig/astro_chart/blob/main/CHANGELOG.md",
+    "documentation_uri" => "https://astro-chart.moritarot.com/docs",
+  }
 
   spec.files         = Dir["lib/**/*.rb", "README.md", "LICENSE", "CHANGELOG.md", "astro_chart.gemspec"]
   spec.require_paths = ["lib"]
